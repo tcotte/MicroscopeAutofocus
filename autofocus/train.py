@@ -24,12 +24,12 @@ parser.add_argument('-epoch', '--epoch', type=int, default=100, required=False,
                     help='Number of epochs used for train the model')
 parser.add_argument('-device', '--device', type=str, default="cuda", required=False,
                     help='Device used to train the model')
-parser.add_argument('-src', '--source_project', type=str, required=True,
-                    help='Path of Supervisely root project which contains pictures')
-parser.add_argument('-trs', '--train_set', type=str, required=True,
-                    help='Dataset of train images')
-parser.add_argument('-tes', '--test_set', type=str, required=True,
-                    help='Dataset of test images')
+# parser.add_argument('-src', '--source_project', type=str, required=True,
+#                     help='Path of Supervisely root project which contains pictures')
+# parser.add_argument('-trs', '--train_set', type=str, required=True,
+#                     help='Dataset of train images')
+# parser.add_argument('-tes', '--test_set', type=str, required=True,
+#                     help='Dataset of test images')
 
 parser.add_argument('-bs', '--batch_size', type=int, default=64, required=False,
                     help='Batch size during the training')
@@ -71,11 +71,11 @@ test_transform = A.Compose([
 
 # Pytorch datasets
 train_dataset = AutofocusDataset(
-    project_dir=args.source_project,
-    dataset=args.train_set, transform=train_transform)
+    project_dir=r"C:\Users\tristan_cotte\PycharmProjects\prior_controller\autofocus\sly_project",
+    dataset="ds0", transform=train_transform)
 test_dataset = AutofocusDataset(
-    project_dir=args.source_project,
-    dataset=args.test_set, transform=test_transform)
+    project_dir=r"C:\Users\tristan_cotte\PycharmProjects\prior_controller\autofocus\sly_project",
+    dataset="ds1", transform=test_transform)
 
 # Dataloaders
 train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
@@ -166,7 +166,7 @@ if __name__ == "__main__":
         train_accuracies.append(train_mse.item() / nb_train_batch)
         test_accuracies.append(test_mse.item() / nb_test_batch)
 
-    torch.save(model.state_dict(), "model_autofocus_1.pt")
+    torch.save(model.state_dict(), "model_autofocus_100_epochs.pt")
 
     t = list(range(NB_EPOCHS))
     _, axs = plt.subplots(1, 2, layout='constrained')

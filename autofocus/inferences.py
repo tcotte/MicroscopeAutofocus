@@ -6,6 +6,8 @@ from matplotlib import pyplot as plt
 from torch import nn
 from torch.nn import Linear, Hardswish, Dropout
 
+from autofocus.utils import get_device
+
 BATCH_SIZE = 64
 # Augmentations
 from torch.utils.data import DataLoader
@@ -46,15 +48,21 @@ model.classifier = nn.Sequential(Linear(in_features=576, out_features=1024),
                                  Linear(in_features=1024, out_features=1))
 
 if __name__ == "__main__":
-    model.load_state_dict(torch.load("model_autofocus.pt"))
+    device = get_device()
+
+    model.load_state_dict(torch.load("model_autofocus_100_epochs.pt"))
+    model.to(device)
     model.eval()
+
 
     y = []
     y_hat = []
 
     with torch.no_grad():
-        for idx in range(200, 300):
-            y_hat.append(model(torch.unsqueeze(train_dataset[idx]["X"].float(), dim=0)).item())
+        for idx in range(600, 700):
+            data = torch.unsqueeze(train_dataset[idx]["X"].float(), dim=0)
+            data = data.to(device)
+            y_hat.append(model(data).cpu().item())
             y.append(train_dataset[idx]["y"])
 
     print(len(y), len(y_hat))
