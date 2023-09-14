@@ -1,0 +1,42 @@
+{
+    "os": "Windows-10-10.0.19045-SP0",
+    "python": "3.8.13",
+    "heartbeatAt": "2023-09-14T11:20:17.190081",
+    "startedAt": "2023-09-14T11:20:15.886850",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "C:\\Users\\tristan_cotte\\PycharmProjects\\MicroscopeAutofocus\\autofocus\\wb_table.py",
+    "codePath": "autofocus\\wb_table.py",
+    "git": {
+        "remote": "https://github.com/tcotte/MicroscopeAutofocus.git",
+        "commit": "270f734387d63d2f7c1fec7fa2f0b2158a768ef7"
+    },
+    "email": "tristan.cotte@outlook.fr",
+    "root": "C:/Users/tristan_cotte/PycharmProjects/MicroscopeAutofocus",
+    "host": "FRF364ZVD",
+    "username": "Tristan_COTTE",
+    "executable": "C:\\Users\\tristan_cotte\\Miniconda3\\envs\\microbio\\python.exe",
+    "cpu_count": 6,
+    "cpu_count_logical": 12,
+    "cpu_freq": {
+        "current": 2100.0,
+        "min": 0.0,
+        "max": 2100.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 2100.0,
+            "min": 0.0,
+            "max": 2100.0
+        }
+    ],
+    "disk": {
+        "total": 471.55956649780273,
+        "used": 458.64994049072266
+    },
+    "memory": {
+        "total": 15.367664337158203
+    }
+}
