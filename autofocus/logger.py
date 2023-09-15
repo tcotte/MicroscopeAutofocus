@@ -64,7 +64,7 @@ class WeightandBiaises:
         self.run.log_artifact(trained_model_artifact)
 
     @staticmethod
-    def tensor2image(x: torch.FloatTensor) -> np.array:
+    def tensor2image(x) -> np.array:
         """
         Transform tensor to image numpy array.
         :param x: image float tensor [1, C, H, W]
