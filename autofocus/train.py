@@ -90,10 +90,10 @@ test_transform = A.Compose([
 # Pytorch datasets
 train_dataset = AutofocusDataset(
     project_dir=args.source_project,
-    dataset=args.train_set, transform=train_transform, z_range=args.z_range)
+    dataset=args.train_set, transform=train_transform, z_range=[int(i) for i in args.z_range])
 test_dataset = AutofocusDataset(
     project_dir=args.source_project,
-    dataset=args.test_set, transform=test_transform, z_range=args.z_range)
+    dataset=args.test_set, transform=test_transform, z_range=[int(i) for i in args.z_range])
 
 # Dataloaders
 if get_os().lower() == "windows":
