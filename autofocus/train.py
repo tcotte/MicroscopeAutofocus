@@ -57,6 +57,8 @@ parser.add_argument('-display', '--interval_display', type=int, default=10, requ
 parser.add_argument('-z', '--z_range', nargs='+', help='Picture selection filtered in Z range', required=False)
 parser.add_argument("-weights", "--pretrained_weights", default=False, action="store_true", required=False,
                     help="Use pretrained weights")
+parser.add_argument("-norm", "--normalize_output", default=False, action="store_true", required=False,
+                    help="Normalize output in range [-1;1]")
 
 args = parser.parse_args()
 
@@ -91,10 +93,12 @@ test_transform = A.Compose([
 # Pytorch datasets
 train_dataset = AutofocusDataset(
     project_dir=args.source_project,
-    dataset=args.train_set, transform=train_transform, z_range=[int(i) for i in args.z_range])
+    dataset=args.train_set, transform=train_transform, z_range=[int(i) for i in args.z_range],
+    normalize_output=args.normalize_output)
 test_dataset = AutofocusDataset(
     project_dir=args.source_project,
-    dataset=args.test_set, transform=test_transform, z_range=[int(i) for i in args.z_range])
+    dataset=args.test_set, transform=test_transform, z_range=[int(i) for i in args.z_range],
+    normalize_output=args.normalize_output)
 
 # Dataloaders
 if get_os().lower() == "windows":
@@ -202,10 +206,13 @@ if __name__ == "__main__":
 
                 test_running_loss += test_loss.item()
 
-        w_b.log_table(outputs.squeeze(), images, labels, epoch)
+        if not args.normalize_output:
+            w_b.log_table(outputs.squeeze(), images, labels, epoch+1)
+        else:
+            w_b.log_table(outputs.squeeze()*int(args.z_range[1]), images, labels*int(args.z_range[1]), epoch + 1)
 
-        w_b.log_rmse(train_mse=train_rmse / len(train_dataset), test_mse=test_rmse / len(test_dataset), epoch=epoch)
-        w_b.log_losses(train_loss=train_running_loss, test_loss=test_running_loss, epoch=epoch)
+        w_b.log_rmse(train_mse=train_rmse / len(train_dataset), test_mse=test_rmse / len(test_dataset), epoch=epoch+1)
+        w_b.log_losses(train_loss=train_running_loss, test_loss=test_running_loss, epoch=epoch+1)
 
         print(f"Epoch {str(epoch + 1)}: train_loss {train_running_loss} -- test_loss {test_running_loss} -- "
               f"train_accuracy {train_rmse.item() / len(train_dataset)} -- "

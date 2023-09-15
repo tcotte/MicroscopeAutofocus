@@ -9,9 +9,11 @@ from torchvision.transforms import transforms
 
 
 class AutofocusDataset(Dataset):
-    def __init__(self, project_dir: str, dataset: str, z_range: Union[List, None] = None, transform=None):
+    def __init__(self, project_dir: str, dataset: str, z_range: Union[List, None] = None, normalize_output=False, transform=None):
         if z_range is None:
             z_range = [-np.inf, np.inf]
+
+        self.normalize_output = normalize_output
 
         self.transform = transform
 
@@ -45,6 +47,9 @@ class AutofocusDataset(Dataset):
         head, tail = os.path.split(img_path)
         annotation = sly.Annotation.load_json_file(os.path.join(self.label_dir, tail + ".json"), self.meta)
         z_value = annotation.img_tags.get('focus_difference').value
+
+        if self.normalize_output:
+            z_value = z_value / self.z_range[1]
 
         pillow_image = Image.open(img_path)
 
