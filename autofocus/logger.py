@@ -21,6 +21,9 @@ class WeightandBiaises:
         """
         if config is None:
             self.config = {}
+        else:
+            self.config = config
+
         self.interval_display = interval_display
         self.run_id = run_id
 
