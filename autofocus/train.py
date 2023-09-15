@@ -9,6 +9,7 @@ from typing import Optional
 import albumentations as A
 import numpy as np
 import torch
+import torchvision
 from matplotlib import pyplot as plt
 from torch import nn
 from torch.utils.data import DataLoader
@@ -18,7 +19,7 @@ from torchvision.models.mobilenetv3 import _mobilenet_v3_conf
 from autofocus_dataset import AutofocusDataset
 from autofocus_model import RegressionMobilenet
 from logger import WeightandBiaises
-from utils import get_device, get_os
+from utils import get_device, get_os, MAE
 import albumentations.pytorch
 
 parser = argparse.ArgumentParser(
@@ -115,7 +116,23 @@ if args.pretrained_weights:
 else:
     pretrained_weights = None
 
-model = RegressionMobilenet(*_mobilenet_v3_conf("mobilenet_v3_small"), dropout=args.dropout, weights=pretrained_weights)
+if pretrained_weights:
+    model = torchvision.models.mobilenet_v3_small(weights='DEFAULT', dropout=args.dropout)
+else:
+    model = torchvision.models.mobilenet_v3_small(dropout=args.dropout)
+
+# https://medium.com/analytics-vidhya/fastai-image-regression-age-prediction-based-on-image-68294d34f2ed
+
+layers = []
+layers += [nn.Linear(in_features=576, out_features=1024)]
+layers += [nn.BatchNorm1d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)]
+layers += [nn.Dropout(p=args.dropout)]
+layers += [nn.Linear(1024, 512, bias=True), nn.Hardswish(inplace=True)]
+layers += [nn.BatchNorm1d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)]
+layers += [nn.Dropout(p=args.dropout)]
+layers += [nn.Linear(512, 16, bias=True), nn.Hardswish(inplace=True)]
+layers += [nn.Linear(16, 1)]
+model.classifier = nn.Sequential(*layers)
 
 criterion = nn.SmoothL1Loss()
 optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
@@ -134,7 +151,7 @@ if __name__ == "__main__":
     nb_train_batch = np.ceil(len(train_dataset) / args.batch_size)
     nb_test_batch = np.ceil(len(test_dataset) / args.batch_size)
 
-    mse_func = nn.MSELoss(reduction="sum")
+    mse_func = nn.L1Loss(reduction="sum")
 
     model.to(device)
 
@@ -165,7 +182,7 @@ if __name__ == "__main__":
             train_loss.backward()
             optimizer.step()
 
-            train_rmse += torch.sqrt(mse_func(outputs.squeeze(), labels))
+            train_rmse += mse_func(outputs.squeeze(), labels)
 
             # print statistics
             train_running_loss += train_loss.item()
@@ -180,7 +197,7 @@ if __name__ == "__main__":
 
                 outputs = model(images)
 
-                test_rmse = torch.sqrt(mse_func(outputs.squeeze(), labels))
+                test_rmse = mse_func(outputs.squeeze(), labels)
                 test_loss = criterion(outputs.squeeze(), labels)
 
                 test_running_loss += test_loss.item()
