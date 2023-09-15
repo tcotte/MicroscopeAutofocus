@@ -221,8 +221,8 @@ if __name__ == "__main__":
 
         train_losses.append(train_running_loss)
         test_losses.append(test_running_loss)
-        train_accuracies.append(train_mae.item() / len(train_dataset))
-        test_accuracies.append(test_mae.item() / len(test_dataset))
+        train_accuracies.append(train_mae / len(train_dataset))
+        test_accuracies.append(test_mae / len(test_dataset))
 
     torch.save(model.state_dict(), args.run_name + ".pt")
     w_b.save_model(model_name="last.pt", model=model)
