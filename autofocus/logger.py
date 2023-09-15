@@ -45,7 +45,7 @@ class WeightandBiaises:
         bool_commit = True
         wandb.log({"Train/Loss": train_loss, "Test/Loss": test_loss}, step=epoch, commit=bool_commit)
 
-    def log_rmse(self, train_mse: float, test_mse: float, epoch: int) -> None:
+    def log_mae(self, train_mse: float, test_mse: float, epoch: int) -> None:
         """
         Log MSE accuracy.
         :param test_mse:

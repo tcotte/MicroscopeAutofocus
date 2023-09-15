@@ -167,8 +167,8 @@ if __name__ == "__main__":
     for epoch in range(args.epoch):  # loop over the dataset multiple times
         train_running_loss = 0.0
         test_running_loss = 0.0
-        train_rmse = 0.0
-        test_rmse = 0.0
+        train_mae = 0.0
+        test_mae = 0.0
 
         model.train()
         for i, data in enumerate(train_dataloader, 0):
@@ -186,7 +186,7 @@ if __name__ == "__main__":
             train_loss.backward()
             optimizer.step()
 
-            train_rmse += mse_func(outputs.squeeze(), labels)
+            train_mae += mse_func(outputs.squeeze(), labels)
 
             # print statistics
             train_running_loss += train_loss.item()
@@ -201,27 +201,29 @@ if __name__ == "__main__":
 
                 outputs = model(images)
 
-                test_rmse = mse_func(outputs.squeeze(), labels)
+                test_mae += mse_func(outputs.squeeze(), labels)
                 test_loss = criterion(outputs.squeeze(), labels)
 
                 test_running_loss += test_loss.item()
 
         if not args.normalize_output:
             w_b.log_table(outputs.squeeze(), images, labels, epoch+1)
+            train_mae = train_mae*args.z_range[1]
+            test_mae = test_mae*args.z_range[1]
         else:
             w_b.log_table(outputs.squeeze()*int(args.z_range[1]), images, labels*int(args.z_range[1]), epoch + 1)
 
-        w_b.log_rmse(train_mse=train_rmse / len(train_dataset), test_mse=test_rmse / len(test_dataset), epoch=epoch+1)
+        w_b.log_mae(train_mse=train_mae / len(train_dataset), test_mse=test_mae / len(test_dataset), epoch=epoch + 1)
         w_b.log_losses(train_loss=train_running_loss, test_loss=test_running_loss, epoch=epoch+1)
 
         print(f"Epoch {str(epoch + 1)}: train_loss {train_running_loss} -- test_loss {test_running_loss} -- "
-              f"train_accuracy {train_rmse.item() / len(train_dataset)} -- "
-              f"test_accuracy {test_rmse.item() / len(test_dataset)}")
+              f"train_accuracy {train_mae.item() / len(train_dataset)} -- "
+              f"test_accuracy {test_mae.item() / len(test_dataset)}")
 
         train_losses.append(train_running_loss)
         test_losses.append(test_running_loss)
-        train_accuracies.append(train_rmse.item() / len(train_dataset))
-        test_accuracies.append(test_rmse.item() / len(test_dataset))
+        train_accuracies.append(train_mae.item() / len(train_dataset))
+        test_accuracies.append(test_mae.item() / len(test_dataset))
 
     torch.save(model.state_dict(), args.run_name + ".pt")
     w_b.save_model(model_name="last.pt", model=model)
