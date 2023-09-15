@@ -207,10 +207,10 @@ if __name__ == "__main__":
 
         if not args.normalize_output:
             w_b.log_table(outputs.squeeze(), images, labels, epoch+1)
-            train_mae = train_mae*args.z_range[1]
-            test_mae = test_mae*args.z_range[1]
         else:
             w_b.log_table(outputs.squeeze()*int(args.z_range[1]), images, labels*int(args.z_range[1]), epoch + 1)
+            train_mae = train_mae * args.z_range[1]
+            test_mae = test_mae * args.z_range[1]
 
         w_b.log_mae(train_mse=train_mae / len(train_dataset), test_mse=test_mae / len(test_dataset), epoch=epoch + 1)
         w_b.log_losses(train_loss=train_running_loss, test_loss=test_running_loss, epoch=epoch+1)
