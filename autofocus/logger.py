@@ -62,7 +62,7 @@ class WeightandBiaises:
                     description="train autofocus regression Mobilenetv3",
                     metadata=dict(self.config))
 
-        model.save(final_model_dir)
+        torch.save(model.state_dict(), final_model_dir)
         trained_model_artifact.add_dir(final_model_dir)
         self.run.log_artifact(trained_model_artifact)
 

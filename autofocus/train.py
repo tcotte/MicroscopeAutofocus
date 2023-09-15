@@ -51,7 +51,6 @@ parser.add_argument('-project', '--project_name', type=str, default="unet_projec
                     help='Name of the project in W&B')
 parser.add_argument('-name', '--run_name', type=str, default=None, required=False,
                     help='Name of the run in W&B')
-
 parser.add_argument('-display', '--interval_display', type=int, default=10, required=False,
                     help='Interval of display mask in W&B')
 parser.add_argument('-z', '--z_range', nargs='+', help='Picture selection filtered in Z range', required=False)
