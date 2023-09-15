@@ -48,7 +48,7 @@ parser.add_argument('-lr', '--learning_rate', type=float, default=0.001, require
                     help='Learning rate used for training')
 parser.add_argument('-project', '--project_name', type=str, default="unet_project", required=False,
                     help='Name of the project in W&B')
-parser.add_argument('-name', '--run_name', type=Optional[str], default=None, required=False,
+parser.add_argument('-name', '--run_name', type=str, default=None, required=False,
                     help='Name of the run in W&B')
 
 parser.add_argument('-display', '--interval_display', type=int, default=10, required=False,
