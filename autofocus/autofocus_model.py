@@ -5,7 +5,7 @@ from torch import nn
 from torchvision.models import MobileNetV3
 from torchvision.models.mobilenetv3 import InvertedResidualConfig, _mobilenet_v3_conf, MobileNet_V3_Small_Weights
 
-from autofocus.utils import get_device
+from utils import get_device
 
 """
 Swish explanation: https://medium.com/@neuralnets/swish-activation-function-by-google-53e1ea86f820

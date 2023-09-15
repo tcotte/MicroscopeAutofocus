@@ -15,10 +15,10 @@ from torch.utils.data import DataLoader
 from torchvision.models import MobileNet_V3_Small_Weights
 from torchvision.models.mobilenetv3 import _mobilenet_v3_conf
 
-from autofocus.autofocus_dataset import AutofocusDataset
-from autofocus.autofocus_model import RegressionMobilenet
-from autofocus.logger import WeightandBiaises
-from autofocus.utils import get_device, get_os
+from autofocus_dataset import AutofocusDataset
+from autofocus_model import RegressionMobilenet
+from logger import WeightandBiaises
+from utils import get_device, get_os
 
 parser = argparse.ArgumentParser(
     prog='Autofocus on microscope',

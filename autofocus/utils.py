@@ -9,5 +9,6 @@ def get_device() -> str:
     else:
         return "cpu"
 
+
 def get_os() -> str:
     return platform.system()

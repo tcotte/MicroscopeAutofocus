@@ -6,13 +6,13 @@ from matplotlib import pyplot as plt
 from torch import nn
 from torch.nn import Linear, Hardswish, Dropout
 
-from autofocus.utils import get_device
+from utils import get_device
 
 BATCH_SIZE = 64
 # Augmentations
 from torch.utils.data import DataLoader
 
-from autofocus.autofocus_dataset import AutofocusDataset
+from autofocus_dataset import AutofocusDataset
 
 train_transform = A.Compose([
     A.augmentations.geometric.resize.LongestMaxSize(max_size=512),
