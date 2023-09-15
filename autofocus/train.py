@@ -19,6 +19,7 @@ from autofocus_dataset import AutofocusDataset
 from autofocus_model import RegressionMobilenet
 from logger import WeightandBiaises
 from utils import get_device, get_os
+import albumentations.pytorch
 
 parser = argparse.ArgumentParser(
     prog='Autofocus on microscope',
