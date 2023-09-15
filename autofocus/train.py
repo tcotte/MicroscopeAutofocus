@@ -209,15 +209,15 @@ if __name__ == "__main__":
             w_b.log_table(outputs.squeeze(), images, labels, epoch+1)
         else:
             w_b.log_table(outputs.squeeze()*int(args.z_range[1]), images, labels*int(args.z_range[1]), epoch + 1)
-            train_mae = train_mae * args.z_range[1]
-            test_mae = test_mae * args.z_range[1]
+            train_mae = train_mae.item() * args.z_range[1]
+            test_mae = test_mae.item() * args.z_range[1]
 
         w_b.log_mae(train_mse=train_mae / len(train_dataset), test_mse=test_mae / len(test_dataset), epoch=epoch + 1)
         w_b.log_losses(train_loss=train_running_loss, test_loss=test_running_loss, epoch=epoch+1)
 
         print(f"Epoch {str(epoch + 1)}: train_loss {train_running_loss} -- test_loss {test_running_loss} -- "
-              f"train_accuracy {train_mae.item() / len(train_dataset)} -- "
-              f"test_accuracy {test_mae.item() / len(test_dataset)}")
+              f"train_accuracy {train_mae / len(train_dataset)} -- "
+              f"test_accuracy {test_mae / len(test_dataset)}")
 
         train_losses.append(train_running_loss)
         test_losses.append(test_running_loss)
