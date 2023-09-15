@@ -38,21 +38,18 @@ class WeightandBiaises:
         :param train_loss: average test loss for the current epoch.
         :param epoch: current epoch.
         """
-        if epoch % self.interval_display == 0:
-            bool_commit = False
-        else:
-            bool_commit = True
 
+        bool_commit = True
         wandb.log({"Train/Loss": train_loss, "Test/Loss": test_loss}, step=epoch, commit=bool_commit)
 
-    def log_mse(self, train_mse: float, test_mse: float, epoch: int) -> None:
+    def log_rmse(self, train_mse: float, test_mse: float, epoch: int) -> None:
         """
         Log MSE accuracy.
         :param test_mse:
         :param train_mse:
         :param epoch: current epoch.
         """
-        wandb.log({"Train/MSE": train_mse, "Test/MSE": test_mse}, step=epoch)
+        wandb.log({"Train/RMSE": train_mse, "Test/RMSE": test_mse}, step=epoch)
 
     def save_model(self, model_name: str, model: RegressionMobilenet) -> None:
         final_model_dir = "last_model"

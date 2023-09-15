@@ -1,4 +1,6 @@
 import os
+from typing import Union, List
+
 import numpy as np
 import supervisely as sly
 from PIL import Image
@@ -7,7 +9,7 @@ from torchvision.transforms import transforms
 
 
 class AutofocusDataset(Dataset):
-    def __init__(self, project_dir: str, dataset: str, z_range=None, transform=None):
+    def __init__(self, project_dir: str, dataset: str, z_range: Union[List, None] = None, transform=None):
         if z_range is None:
             z_range = [-np.inf, np.inf]
 

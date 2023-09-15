@@ -52,27 +52,36 @@ parser.add_argument('-name', '--run_name', type=Optional[str], default=None, req
 
 parser.add_argument('-display', '--interval_display', type=int, default=10, required=False,
                     help='Interval of display mask in W&B')
-
-# pretrain model
+parser.add_argument('-z', '--z_range', nargs='+', help='Picture selection filtered in Z range', required=False)
 parser.add_argument("-weights", "--pretrained_weights", default=False, action="store_true", required=False,
                     help="Use pretrained weights")
 
 args = parser.parse_args()
 
-### Datasets
 
+### Fix seed
+seed = 123
+torch.manual_seed(seed)
+torch.cuda.manual_seed(seed)
+torch.cuda.manual_seed_all(seed)
+np.random.seed(seed)
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
+
+### Datasets
 # Augmentations
 train_transform = A.Compose([
     A.Normalize(),
     A.augmentations.geometric.resize.LongestMaxSize(max_size=args.img_size),
     A.HorizontalFlip(p=0.5),
     A.VerticalFlip(p=0.5),
-    A.augmentations.transforms.PixelDropout (dropout_prob=0.01),
+    A.augmentations.transforms.PixelDropout(dropout_prob=0.01),
     A.RandomBrightnessContrast(p=0.2),
     A.pytorch.transforms.ToTensorV2(),
 ])
 
 test_transform = A.Compose([
+    A.Normalize(),
     A.augmentations.geometric.resize.LongestMaxSize(max_size=args.img_size),
     A.pytorch.transforms.ToTensorV2()
 ])
@@ -80,10 +89,10 @@ test_transform = A.Compose([
 # Pytorch datasets
 train_dataset = AutofocusDataset(
     project_dir=args.source_project,
-    dataset=args.train_set, transform=train_transform, z_range=[-145, 150])
+    dataset=args.train_set, transform=train_transform, z_range=args.z_range)
 test_dataset = AutofocusDataset(
     project_dir=args.source_project,
-    dataset=args.test_set, transform=test_transform, z_range=[-145, 150])
+    dataset=args.test_set, transform=test_transform, z_range=args.z_range)
 
 # Dataloaders
 if get_os().lower() == "windows":
@@ -115,9 +124,9 @@ optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_d
 if __name__ == "__main__":
 
     device = get_device()
-    conf= {"device": device, "loss": str(criterion), "optimizer": str(optimizer), "lr": args.learning_rate,
-           "weight_decay": args.weight_decay, "pretrained_model": args.pretrained_weights,
-           "batch_size": args.batch_size, "nb_epoch": args.epoch, "dropout": args.dropout, "img_size": args.img_size}
+    conf = {"device": device, "loss": str(criterion), "optimizer": str(optimizer), "lr": args.learning_rate,
+            "weight_decay": args.weight_decay, "pretrained_model": args.pretrained_weights,
+            "batch_size": args.batch_size, "nb_epoch": args.epoch, "dropout": args.dropout, "img_size": args.img_size}
 
     w_b = WeightandBiaises(project_name=args.project_name, run_id=args.run_name, config=conf)
 
@@ -125,7 +134,6 @@ if __name__ == "__main__":
     nb_test_batch = np.ceil(len(test_dataset) / args.batch_size)
 
     mse_func = nn.MSELoss(reduction="sum")
-
 
     model.to(device)
 
@@ -137,8 +145,8 @@ if __name__ == "__main__":
     for epoch in range(args.epoch):  # loop over the dataset multiple times
         train_running_loss = 0.0
         test_running_loss = 0.0
-        train_mse = 0.0
-        test_mse = 0.0
+        train_rmse = 0.0
+        test_rmse = 0.0
 
         model.train()
         for i, data in enumerate(train_dataloader, 0):
@@ -156,7 +164,7 @@ if __name__ == "__main__":
             train_loss.backward()
             optimizer.step()
 
-            train_mse += mse_func(outputs.squeeze(), labels)
+            train_rmse += torch.sqrt(mse_func(outputs.squeeze(), labels))
 
             # print statistics
             train_running_loss += train_loss.item()
@@ -171,24 +179,24 @@ if __name__ == "__main__":
 
                 outputs = model(images)
 
-                test_mse = mse_func(outputs.squeeze(), labels)
+                test_rmse = torch.sqrt(mse_func(outputs.squeeze(), labels))
                 test_loss = criterion(outputs.squeeze(), labels)
 
                 test_running_loss += test_loss.item()
 
-                w_b.log_table(outputs.squeeze(), images, labels, epoch)
+        w_b.log_table(outputs.squeeze(), images, labels, epoch)
 
-        w_b.log_mse(train_mse=train_mse/len(train_dataset), test_mse=test_mse/len(test_dataset), epoch=epoch)
+        w_b.log_rmse(train_mse=train_rmse / len(train_dataset), test_mse=test_rmse / len(test_dataset), epoch=epoch)
         w_b.log_losses(train_loss=train_running_loss, test_loss=test_running_loss, epoch=epoch)
 
         print(f"Epoch {str(epoch + 1)}: train_loss {train_running_loss} -- test_loss {test_running_loss} -- "
-              f"train_accuracy {train_mse.item()/len(train_dataset)} -- "
-              f"test_accuracy {test_mse.item()/len(test_dataset)}")
+              f"train_accuracy {train_rmse.item() / len(train_dataset)} -- "
+              f"test_accuracy {test_rmse.item() / len(test_dataset)}")
 
         train_losses.append(train_running_loss)
         test_losses.append(test_running_loss)
-        train_accuracies.append(train_mse.item()/len(train_dataset))
-        test_accuracies.append(test_mse.item()/len(test_dataset))
+        train_accuracies.append(train_rmse.item() / len(train_dataset))
+        test_accuracies.append(test_rmse.item() / len(test_dataset))
 
     torch.save(model.state_dict(), args.run_name + ".pt")
     w_b.save_model(model_name="last.pt", model=model)
