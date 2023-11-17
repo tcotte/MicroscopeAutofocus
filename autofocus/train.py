@@ -4,23 +4,22 @@ Deep learning autofocus: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8803042/#r
 """
 import argparse
 import os
-from typing import Optional
 
 import albumentations as A
+import albumentations.pytorch
 import numpy as np
 import torch
 import torchvision
+from imutils.paths import list_images
 from matplotlib import pyplot as plt
+from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import DataLoader
 from torchvision.models import MobileNet_V3_Small_Weights
-from torchvision.models.mobilenetv3 import _mobilenet_v3_conf
 
-from autofocus_dataset import AutofocusDataset
-from autofocus_model import RegressionMobilenet
+from autofocus_dataset import AutofocusDataset, get_labelfile_from_imgfile, AutofocusDatasetFromList
 from logger import WeightandBiaises
-from utils import get_device, get_os, MAE
-import albumentations.pytorch
+from utils import get_device, get_os
 
 parser = argparse.ArgumentParser(
     prog='Autofocus on microscope',
@@ -90,14 +89,23 @@ test_transform = A.Compose([
 ])
 
 # Pytorch datasets
-train_dataset = AutofocusDataset(
-    project_dir=args.source_project,
-    dataset=args.train_set, transform=train_transform, z_range=[int(i) for i in args.z_range],
-    normalize_output=args.normalize_output)
-test_dataset = AutofocusDataset(
-    project_dir=args.source_project,
-    dataset=args.test_set, transform=test_transform, z_range=[int(i) for i in args.z_range],
-    normalize_output=args.normalize_output)
+if args.train_set is not None:
+    train_dataset = AutofocusDataset(
+        project_dir=args.source_project,
+        dataset=args.train_set, transform=train_transform, z_range=[int(i) for i in args.z_range],
+        normalize_output=args.normalize_output)
+    test_dataset = AutofocusDataset(
+        project_dir=args.source_project,
+        dataset=args.test_set, transform=test_transform, z_range=[int(i) for i in args.z_range],
+        normalize_output=args.normalize_output)
+
+else:
+    X = list(list_images(args.source_project))
+    y = [get_labelfile_from_imgfile(img) for img in X]
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    train_dataset = AutofocusDatasetFromList(images_list=X_train, ann_list=y_train)
+    test_dataset = AutofocusDatasetFromList(images_list=X_test, ann_list=y_test)
+
 
 # Dataloaders
 if get_os().lower() == "windows":
