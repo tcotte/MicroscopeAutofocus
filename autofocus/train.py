@@ -32,9 +32,9 @@ parser.add_argument('-device', '--device', type=str, default="cuda", required=Fa
                     help='Device used to train the model')
 parser.add_argument('-src', '--source_project', type=str, required=True,
                     help='Path of Supervisely root project which contains pictures')
-parser.add_argument('-trs', '--train_set', type=str, required=True,
+parser.add_argument('-trs', '--train_set', type=str, required=False,
                     help='Dataset of train images')
-parser.add_argument('-tes', '--test_set', type=str, required=True,
+parser.add_argument('-tes', '--test_set', type=str, required=False,
                     help='Dataset of test images')
 parser.add_argument('-wd', '--weight_decay', type=float, default=0, required=False,
                     help='Weight decay used to regularized')
@@ -46,7 +46,7 @@ parser.add_argument('-do', '--dropout', type=float, default=0.2, required=False,
                     help='Dropout used for the training')
 parser.add_argument('-lr', '--learning_rate', type=float, default=0.001, required=False,
                     help='Learning rate used for training')
-parser.add_argument('-project', '--project_name', type=str, default="unet_project", required=False,
+parser.add_argument('-project', '--project_name', type=str, default="Microscope_autofocus", required=False,
                     help='Name of the project in W&B')
 parser.add_argument('-name', '--run_name', type=str, default=None, required=False,
                     help='Name of the run in W&B')
@@ -59,7 +59,6 @@ parser.add_argument("-norm", "--normalize_output", default=False, action="store_
                     help="Normalize output in range [-1;1]")
 
 args = parser.parse_args()
-
 
 ### Fix seed
 seed = 123
@@ -103,9 +102,8 @@ else:
     X = list(list_images(args.source_project))
     y = [get_labelfile_from_imgfile(img) for img in X]
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    train_dataset = AutofocusDatasetFromList(images_list=X_train, ann_list=y_train)
-    test_dataset = AutofocusDatasetFromList(images_list=X_test, ann_list=y_test)
-
+    train_dataset = AutofocusDatasetFromList(images_list=X_train, ann_list=y_train, transform=train_transform)
+    test_dataset = AutofocusDatasetFromList(images_list=X_test, ann_list=y_test, transform=test_transform)
 
 # Dataloaders
 if get_os().lower() == "windows":
@@ -214,14 +212,14 @@ if __name__ == "__main__":
                 test_running_loss += test_loss.item()
 
         if not args.normalize_output:
-            w_b.log_table(outputs.squeeze(), images, labels, epoch+1)
+            w_b.log_table(outputs.squeeze(), images, labels, epoch + 1)
         else:
-            w_b.log_table(outputs.squeeze()*int(args.z_range[1]), images, labels*int(args.z_range[1]), epoch + 1)
+            w_b.log_table(outputs.squeeze() * int(args.z_range[1]), images, labels * int(args.z_range[1]), epoch + 1)
             train_mae = train_mae.item() * int(args.z_range[1])
             test_mae = test_mae.item() * int(args.z_range[1])
 
         w_b.log_mae(train_mse=train_mae / len(train_dataset), test_mse=test_mae / len(test_dataset), epoch=epoch + 1)
-        w_b.log_losses(train_loss=train_running_loss, test_loss=test_running_loss, epoch=epoch+1)
+        w_b.log_losses(train_loss=train_running_loss, test_loss=test_running_loss, epoch=epoch + 1)
 
         print(f"Epoch {str(epoch + 1)}: train_loss {train_running_loss} -- test_loss {test_running_loss} -- "
               f"train_accuracy {train_mae / len(train_dataset)} -- "
@@ -231,6 +229,9 @@ if __name__ == "__main__":
         test_losses.append(test_running_loss)
         train_accuracies.append(train_mae / len(train_dataset))
         test_accuracies.append(test_mae / len(test_dataset))
+
+        if epoch % 10 == 0:
+            torch.save(model.state_dict(), args.run_name + str(epoch) + "e.pt")
 
     torch.save(model.state_dict(), args.run_name + ".pt")
     w_b.save_model(model_name="last.pt", model=model)

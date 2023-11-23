@@ -150,3 +150,4 @@ if __name__ == "__main__":
     train_dataset = AutofocusDatasetFromList(images_list=imgs, ann_list=labels)
 
     print(train_dataset[8])
+    print(len(train_dataset))

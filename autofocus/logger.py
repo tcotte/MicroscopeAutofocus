@@ -1,7 +1,8 @@
+import os
 from typing import Union, List
 
 import numpy as np
-from wandb.wandb_torch import torch
+import torch
 
 import wandb
 
@@ -55,16 +56,17 @@ class WeightandBiaises:
         wandb.log({"Train/RMSE": train_mse, "Test/RMSE": test_mse}, step=epoch)
 
     def save_model(self, model_name: str, model: RegressionMobilenet) -> None:
-        final_model_dir = "last_model"
-
-        trained_model_artifact = wandb.Artifact(
-                    model_name, type="model",
-                    description="train autofocus regression Mobilenetv3",
-                    metadata=dict(self.config))
-
-        torch.save(model.state_dict(), final_model_dir)
-        trained_model_artifact.add_dir(final_model_dir)
-        self.run.log_artifact(trained_model_artifact)
+        # final_model_dir = "last_model"
+        #
+        # trained_model_artifact = wandb.Artifact(
+        #             model_name, type="model",
+        #             description="train autofocus regression Mobilenetv3",
+        #             metadata=dict(self.config))
+        #
+        # torch.save(model.state_dict(), final_model_dir)
+        # trained_model_artifact.add_dir(final_model_dir)
+        # self.run.log_artifact(trained_model_artifact)
+        torch.save(model, os.path.join(wandb.run.dir, model_name))
 
     @staticmethod
     def tensor2image(x) -> np.array:
