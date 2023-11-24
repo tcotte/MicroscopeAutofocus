@@ -89,13 +89,15 @@ test_transform = A.Compose([
 
 # Pytorch datasets
 if args.train_set is not None:
+    if args.z_range is not None:
+        args.z_range = [int(i) for i in args.z_range]
     train_dataset = AutofocusDataset(
         project_dir=args.source_project,
-        dataset=args.train_set, transform=train_transform, z_range=[int(i) for i in args.z_range],
+        dataset=args.train_set, transform=train_transform, z_range=args.z_range,
         normalize_output=args.normalize_output)
     test_dataset = AutofocusDataset(
         project_dir=args.source_project,
-        dataset=args.test_set, transform=test_transform, z_range=[int(i) for i in args.z_range],
+        dataset=args.test_set, transform=test_transform, z_range=args.z_range,
         normalize_output=args.normalize_output)
 
 else:
@@ -231,26 +233,10 @@ if __name__ == "__main__":
         test_accuracies.append(test_mae / len(test_dataset))
 
         if epoch % 10 == 0:
-            torch.save(model.state_dict(), args.run_name + str(epoch) + "e.pt")
+            w_b.save_checkpoint(epoch=epoch, model=model, optimizer=optimizer, train_loss=train_running_loss,
+                                test_loss=test_running_loss)
 
     torch.save(model.state_dict(), args.run_name + ".pt")
     w_b.save_model(model_name="last.pt", model=model)
 
-    # Plot training data
-    t = list(range(args.epoch + 1))
-    _, axs = plt.subplots(1, 2, layout='constrained')
-    axs[0].plot(t, train_accuracies, 'b', label="train_accuracies")
-    axs[0].plot(t, test_accuracies, 'r', label="test_accuracies")
-    axs[0].set_title("MSE during training")
-    axs[0].set_ylabel("MSE")
-    axs[0].set_xlabel("Epochs")
-    axs[0].legend()
-
-    axs[1].plot(t, train_losses, 'b', label="train_losses")
-    axs[1].plot(t, test_losses, 'r', label="test_losses")
-    axs[1].set_title("Losses during training")
-    axs[1].set_ylabel("L1 smooth loss")
-    axs[1].set_xlabel("Epochs")
-    axs[1].legend()
-
-    plt.show()
+    print("[SUCCESS]: model was trained without disagreement.")

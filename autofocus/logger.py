@@ -91,3 +91,37 @@ class WeightandBiaises:
             [tbl.add_data(wandb.Image(image), pred, label) for image, pred, label in zip(images, predictions, labels)]
 
             wandb.log({"Predicted_autofocus": tbl})
+
+    @staticmethod
+    def save_checkpoint(epoch: int, model: torch.nn, optimizer: torch.optim, train_loss: float,
+                        test_loss: float) -> None:
+        """
+        Save checkpoint in W&B
+        :param epoch: current epoch number
+        :param model: current model
+        :param optimizer: current optimizer
+        :param train_loss: current train loss
+        :param test_loss: current test loss
+        """
+        path_checkpoint_dir = "checkpoint"
+        checkpoint_filename = f"checkpoint_{str(epoch)}.pt"
+        path_checkpoint = os.path.join(path_checkpoint_dir, checkpoint_filename)
+        name = f"{str(epoch)}th_epoch_chkpt"
+
+        # create checkpoint directory
+        if not os.path.isdir(path_checkpoint_dir):
+            os.mkdir(path_checkpoint_dir)
+
+        # save checkpoint file
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'train_loss': train_loss,
+            'test_loss': test_loss,
+        }, path_checkpoint)
+
+        # transfer to W&B
+        artifact = wandb.Artifact(name=name, type="model")
+        artifact.add_file(local_path=path_checkpoint, name=name)
+        wandb.run.log_artifact(artifact)
