@@ -1,9 +1,11 @@
+import os.path
+
 import albumentations as A
 import albumentations.pytorch
-import cv2
 import numpy as np
 import torch
 import torchvision
+from imutils.paths import list_images
 from matplotlib import pyplot as plt
 from torch import nn
 from tqdm import tqdm
@@ -14,7 +16,8 @@ BATCH_SIZE = 64
 # Augmentations
 from torch.utils.data import DataLoader
 
-from autofocus_dataset import AutofocusDataset
+from autofocus_dataset import get_labelfile_from_imgfile, AutofocusDatasetFromList
+
 
 def rmse(y_hat, y_ground_truth):
     mse = np.square(np.subtract(np.array(y_ground_truth), np.array(y_hat))).mean()
@@ -34,12 +37,17 @@ test_transform = A.Compose([
 ])
 
 # Pytorch datasets
-train_dataset = AutofocusDataset(
-    project_dir=r"C:\Users\tristan_cotte\PycharmProjects\prior_controller\output_picture\test_set",
-    dataset="37805x_18699y", transform=test_transform)
+# train_dataset = AutofocusDataset(
+#     project_dir=r"C:\Users\tristan_cotte\PycharmProjects\prior_controller\output_picture\dataset_Z\slide5",
+#     dataset="68610x_26972y", transform=test_transform)
 # test_dataset = AutofocusDataset(
 #     project_dir=r"C:\Users\tristan_cotte\PycharmProjects\prior_controller\autofocus\sly_project",
 #     dataset="ds1", transform=test_transform)
+path_dataset = os.path.join(r"C:\Users\tristan_cotte\PycharmProjects\prior_controller\output_picture\dataset_Z_sly",
+                            "15408x_25564y")
+imgs = list(list_images(path_dataset))
+labels = [get_labelfile_from_imgfile(img) for img in imgs]
+train_dataset = AutofocusDatasetFromList(images_list=imgs, ann_list=labels, transform=test_transform)
 
 # Dataloaders
 train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=False)
@@ -64,7 +72,7 @@ model.classifier = nn.Sequential(*layers)
 if __name__ == "__main__":
     device = get_device()
 
-    model.load_state_dict(torch.load(r"C:\Users\tristan_cotte\PycharmProjects\microscope_autofocus\autofocus\models\first_run_new_obj.pt"))
+    model = torch.load(r"C:\Users\tristan_cotte\PycharmProjects\microscope_autofocus\autofocus\checkpoint\run_fixed_large_dataset_last.pt")
     model.to(device)
     model.eval()
 
@@ -77,9 +85,9 @@ if __name__ == "__main__":
             # data = torch.unsqueeze(train_dataset[idx]["X"].float(), dim=0)
             data = torch.unsqueeze(train_dataset[idx]["X"], dim=0)
             data_visible = train_dataset[idx]["X"].permute(1, 2, 0)
-            plt.imshow(data_visible)
+            # plt.imshow(data_visible)
             # plt.imshow(cv2.cvtColor(data_visible, cv2.COLOR_BGR2RGB))
-            plt.show()
+            # plt.show()
             data = data.to(device)
             y_hat.append(model(data).cpu().item())
             y.append(train_dataset[idx]["y"])
@@ -92,3 +100,5 @@ if __name__ == "__main__":
     plt.xlabel('Z distance from focus (µm)')
     plt.ylabel('Predicted Z distance from focus (µm)')
     plt.show()
+
+

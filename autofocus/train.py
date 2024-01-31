@@ -76,6 +76,10 @@ train_transform = A.Compose([
     A.augmentations.geometric.resize.LongestMaxSize(max_size=args.img_size),
     A.HorizontalFlip(p=0.5),
     A.VerticalFlip(p=0.5),
+    A.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.50, rotate_limit=45, p=.75),
+    A.OneOf([
+            A.OpticalDistortion(p=0.3),
+            A.GridDistortion(p=.1)]),
     A.augmentations.transforms.PixelDropout(dropout_prob=0.01),
     A.RandomBrightnessContrast(p=0.2),
     A.pytorch.transforms.ToTensorV2(),

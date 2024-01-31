@@ -83,12 +83,7 @@ class AutofocusDatasetFromList(Dataset):
 
         self.transform = transform
 
-        # self.project = sly.Project(project_dir, sly.OpenMode.READ)
-        # self.meta = self.project.meta
-        # self.dataset = self.project.datasets.get(dataset)
-
         self.z_range = z_range
-        # self.images_paths = self.filter_dataset()
 
     def __len__(self):
         return len(self.images_list)
@@ -130,10 +125,11 @@ def get_labelfile_from_imgfile(img_path):
     path = os.path.normpath(img_path)
     splitted_path = path.split(os.sep)
     if get_os() == "Windows":
-        label_path = os.path.join("C://", *splitted_path[1:-2], "ann", splitted_path[-1] + ".json")
+        label_path = os.path.join("C:\\", *splitted_path[1:-2], "ann", splitted_path[-1] + ".json")
+        return label_path
     else:
-        label_path = os.path.join(*splitted_path[:-2], "ann", splitted_path[-1] + ".json")
-    return label_path
+        label_path = os.path.join(*splitted_path[2:-2], "ann", splitted_path[-1] + ".json")
+        return os.path.abspath(label_path)
 
 
 def get_os() -> str:
