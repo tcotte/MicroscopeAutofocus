@@ -161,3 +161,5 @@ cython_debug/
 dataset/
 autofocus/wandb
 wandb/
+autofocus/data
+autofocus/models
