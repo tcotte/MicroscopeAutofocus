@@ -6,18 +6,16 @@ import argparse
 import os
 
 import albumentations as A
-import albumentations.pytorch
 import numpy as np
 import torch
 import torchvision
 from imutils.paths import list_images
-from matplotlib import pyplot as plt
 from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import DataLoader
 from torchvision.models import MobileNet_V3_Small_Weights
 
-from autofocus_dataset import AutofocusDataset, get_labelfile_from_imgfile, AutofocusDatasetFromList
+from autofocus_dataset import AutofocusDatasetFromList
 from logger import WeightandBiaises
 from utils import get_device, get_os
 
@@ -80,7 +78,7 @@ train_transform = A.Compose([
     A.OneOf([
             A.OpticalDistortion(p=0.3),
             A.GridDistortion(p=.1)]),
-    A.augmentations.transforms.PixelDropout(dropout_prob=0.01),
+    A.PixelDropout(dropout_prob=0.01),
     A.RandomBrightnessContrast(p=0.2),
     A.pytorch.transforms.ToTensorV2(),
 ])
@@ -106,7 +104,7 @@ if args.train_set is not None:
 
 else:
     X = list(list_images(args.source_project))
-    y = [get_labelfile_from_imgfile(img) for img in X]
+    y = len(list(list_images(args.source_project)))*[0] # fake y to compute train_test_split
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     train_dataset = AutofocusDatasetFromList(images_list=X_train, ann_list=y_train, transform=train_transform)
     test_dataset = AutofocusDatasetFromList(images_list=X_test, ann_list=y_test, transform=test_transform)

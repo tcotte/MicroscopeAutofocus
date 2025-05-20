@@ -2,54 +2,94 @@ import json
 import os
 import platform
 from typing import Union, List
-
+import exif
 import numpy as np
-import supervisely as sly
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import transforms
 
 
-class AutofocusDataset(Dataset):
-    def __init__(self, project_dir: str, dataset: str, z_range: Union[List, None] = None, normalize_output=False,
+# class AutofocusDataset(Dataset):
+#     def __init__(self, project_dir: str, dataset: str, z_range: Union[List, None] = None, normalize_output=False,
+#                  transform=None):
+#         if z_range is None:
+#             z_range = [-np.inf, np.inf]
+#
+#         self.normalize_output = normalize_output
+#
+#         self.transform = transform
+#
+#         self.project = sly.Project(project_dir, sly.OpenMode.READ)
+#         self.meta = self.project.meta
+#         self.dataset = self.project.datasets.get(dataset)
+#
+#         self.z_range = z_range
+#         self.images_paths = self.filter_dataset()
+#
+#         self.img_dir = self.dataset.img_dir
+#         self.label_dir = self.dataset.ann_dir
+#
+#     def __len__(self):
+#         return len(self.images_paths)
+#
+#     def filter_dataset(self):
+#         filtered_images = []
+#         for item in self.dataset.items():
+#             item_name, picture_path, json_path = item
+#             annotation = sly.Annotation.load_json_file(json_path, self.meta)
+#             z_value = annotation.img_tags.get('focus_difference').value
+#             if self.z_range[0] <= z_value <= self.z_range[1]:
+#                 filtered_images.append(picture_path)
+#
+#         return filtered_images
+#
+#     def __getitem__(self, idx):
+#         img_path = self.images_paths[idx]
+#
+#         head, tail = os.path.split(img_path)
+#         annotation = sly.Annotation.load_json_file(os.path.join(self.label_dir, tail + ".json"), self.meta)
+#         z_value = annotation.img_tags.get('focus_difference').value
+#
+#         if self.normalize_output:
+#             z_value = z_value / self.z_range[1]
+#
+#         pillow_image = Image.open(img_path)
+#
+#         if self.transform is None:
+#             transform = transforms.ToTensor()
+#
+#             # Convert the image to PyTorch tensor
+#             tensor_image = transform(pillow_image)
+#
+#         else:
+#             transformed = self.transform(image=np.array(pillow_image))
+#             tensor_image = transformed["image"]
+#
+#         return {"X": tensor_image, "y": z_value}
+
+class AutofocusDatasetFromMetadata(Dataset):
+    def __init__(self, images_list: List[str], z_range: Union[List, None] = None, normalize_output=False,
                  transform=None):
         if z_range is None:
             z_range = [-np.inf, np.inf]
 
+        self.images_list = images_list
         self.normalize_output = normalize_output
 
         self.transform = transform
 
-        self.project = sly.Project(project_dir, sly.OpenMode.READ)
-        self.meta = self.project.meta
-        self.dataset = self.project.datasets.get(dataset)
-
         self.z_range = z_range
-        self.images_paths = self.filter_dataset()
-
-        self.img_dir = self.dataset.img_dir
-        self.label_dir = self.dataset.ann_dir
 
     def __len__(self):
-        return len(self.images_paths)
+        return len(self.images_list)
 
-    def filter_dataset(self):
-        filtered_images = []
-        for item in self.dataset.items():
-            item_name, picture_path, json_path = item
-            annotation = sly.Annotation.load_json_file(json_path, self.meta)
-            z_value = annotation.img_tags.get('focus_difference').value
-            if self.z_range[0] <= z_value <= self.z_range[1]:
-                filtered_images.append(picture_path)
-
-        return filtered_images
+    @staticmethod
+    def get_focus_diff_from_exif_metadata(img_path: str) -> float:
+        return float(exif.Image(img_path).make)
 
     def __getitem__(self, idx):
-        img_path = self.images_paths[idx]
-
-        head, tail = os.path.split(img_path)
-        annotation = sly.Annotation.load_json_file(os.path.join(self.label_dir, tail + ".json"), self.meta)
-        z_value = annotation.img_tags.get('focus_difference').value
+        img_path = self.images_list[idx]
+        z_value = self.get_focus_diff_from_exif_metadata(img_path=img_path)
 
         if self.normalize_output:
             z_value = z_value / self.z_range[1]
@@ -67,7 +107,6 @@ class AutofocusDataset(Dataset):
             tensor_image = transformed["image"]
 
         return {"X": tensor_image, "y": z_value}
-
 
 class AutofocusDatasetFromList(Dataset):
     def __init__(self, images_list: List[str], ann_list: List[str], z_range: Union[List, None] = None,
@@ -98,6 +137,7 @@ class AutofocusDatasetFromList(Dataset):
                 return i.get("value")
 
         raise "Focus difference tags was not found"
+
 
     def __getitem__(self, idx):
         img_path = self.images_list[idx]
@@ -139,7 +179,7 @@ def get_os() -> str:
 if __name__ == "__main__":
     from imutils.paths import list_images
 
-    path_dataset = r"C:\Users\tristan_cotte\PycharmProjects\prior_controller\output_picture\acquisition_first_slide"
+    path_dataset = r"C:\Users\tristan_cotte\PycharmProjects\microscope_autofocus\autofocus\data\dataset_v1\X\slide_3"
     imgs = list(list_images(path_dataset))
     labels = [get_labelfile_from_imgfile(img) for img in imgs]
 
