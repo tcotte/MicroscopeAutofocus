@@ -1,6 +1,8 @@
 import json
 import os
 import platform
+import time
+from timeit import timeit
 from typing import Union, List
 import exif
 import numpy as np

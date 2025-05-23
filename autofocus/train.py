@@ -3,6 +3,7 @@ Regression accuracies: https://machinelearningmastery.com/regression-metrics-for
 Deep learning autofocus: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8803042/#r24
 """
 import argparse
+import logging
 import os
 
 import albumentations as A
@@ -14,8 +15,8 @@ from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import DataLoader
 from torchvision.models import MobileNet_V3_Small_Weights
-
-from autofocus_dataset import AutofocusDatasetFromList
+from tqdm import tqdm
+from autofocus_dataset import AutofocusDatasetFromList, AutofocusDatasetFromMetadata
 from logger import WeightandBiaises
 from utils import get_device, get_os
 
@@ -53,6 +54,8 @@ parser.add_argument('-display', '--interval_display', type=int, default=10, requ
 parser.add_argument('-z', '--z_range', nargs='+', help='Picture selection filtered in Z range', required=False)
 parser.add_argument("-weights", "--pretrained_weights", default=False, action="store_true", required=False,
                     help="Use pretrained weights")
+parser.add_argument("--split_by_xy_positions", default=False, action="store_true", required=False,
+                    help="Instead of split dataset picture by picture, split the dataset depending on XY position")
 parser.add_argument("-norm", "--normalize_output", default=False, action="store_true", required=False,
                     help="Normalize output in range [-1;1]")
 
@@ -74,7 +77,8 @@ train_transform = A.Compose([
     A.augmentations.geometric.resize.LongestMaxSize(max_size=args.img_size),
     A.HorizontalFlip(p=0.5),
     A.VerticalFlip(p=0.5),
-    A.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.50, rotate_limit=45, p=.75),
+    # A.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.50, rotate_limit=45, p=.75),
+    # A.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.50, rotate_limit=45, p=.75),
     A.OneOf([
             A.OpticalDistortion(p=0.3),
             A.GridDistortion(p=.1)]),
@@ -103,11 +107,32 @@ if args.train_set is not None:
         normalize_output=args.normalize_output)
 
 else:
+    logging.info('Split training and test sets...')
     X = list(list_images(args.source_project))
-    y = len(list(list_images(args.source_project)))*[0] # fake y to compute train_test_split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    train_dataset = AutofocusDatasetFromList(images_list=X_train, ann_list=y_train, transform=train_transform)
-    test_dataset = AutofocusDatasetFromList(images_list=X_test, ann_list=y_test, transform=test_transform)
+    if not args.split_by_xy_positions:
+        y = len(list(list_images(args.source_project)))*[0] # fake y to compute train_test_split
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+
+    else:
+        xy_positions = list(set([os.path.basename(os.path.dirname(i)) for i in X]))
+        train_positions, test_positions, _, _ = train_test_split(xy_positions, [0] * len(xy_positions), test_size=0.2,
+                                                                 random_state=42)
+        X_train = []
+        X_test = []
+        for element in X:
+            if os.path.basename(os.path.dirname(element)) in train_positions:
+                X_train.append(element)
+            else:
+                X_test.append(element)
+
+        y_train = [0]*len(X_train)
+        y_test = [0]*len(X_test)
+
+    logging.info('Datasets creation...')
+    train_dataset = AutofocusDatasetFromMetadata(images_list=X_train, transform=train_transform)
+    test_dataset = AutofocusDatasetFromMetadata(images_list=X_test, transform=test_transform)
+
 
 # Dataloaders
 if get_os().lower() == "windows":
@@ -161,8 +186,8 @@ if __name__ == "__main__":
 
     w_b = WeightandBiaises(project_name=args.project_name, run_id=args.run_name, config=conf)
 
-    nb_train_batch = np.ceil(len(train_dataset) / args.batch_size)
-    nb_test_batch = np.ceil(len(test_dataset) / args.batch_size)
+    nb_train_batch = int(np.ceil(len(train_dataset) / args.batch_size))
+    nb_test_batch = int(np.ceil(len(test_dataset) / args.batch_size))
 
     mse_func = nn.L1Loss(reduction="sum")
 
@@ -180,25 +205,29 @@ if __name__ == "__main__":
         test_mae = 0.0
 
         model.train()
-        for i, data in enumerate(train_dataloader, 0):
-            # get the inputs; data is a list of [inputs, labels]
-            images, labels = data["X"].float(), data["y"]
 
-            images = images.to(device)
-            labels = labels.to(device)
-            # zero the parameter gradients
-            optimizer.zero_grad()
+        with tqdm(train_dataloader, unit="batch") as t_epoch:
+            for batch in t_epoch:
+                t_epoch.set_description(f"Epoch {epoch}")
 
-            # forward + backward + optimize
-            outputs = model(images)
-            train_loss = criterion(outputs.squeeze(), labels)
-            train_loss.backward()
-            optimizer.step()
+                # get the inputs; data is a list of [inputs, labels]
+                images, labels = batch["X"].float(), batch["y"]
 
-            train_mae += mse_func(outputs.squeeze(), labels)
+                images = images.to(device)
+                labels = labels.to(device)
+                # zero the parameter gradients
+                optimizer.zero_grad()
 
-            # print statistics
-            train_running_loss += train_loss.item()
+                # forward + backward + optimize
+                outputs = model(images)
+                train_loss = criterion(outputs.squeeze(), labels)
+                train_loss.backward()
+                optimizer.step()
+
+                train_mae += mse_func(outputs.squeeze(), labels)
+
+                # print statistics
+                train_running_loss += train_loss.item()
 
         model.eval()
         with torch.no_grad():
@@ -221,6 +250,9 @@ if __name__ == "__main__":
             w_b.log_table(outputs.squeeze() * int(args.z_range[1]), images, labels * int(args.z_range[1]), epoch + 1)
             train_mae = train_mae.item() * int(args.z_range[1])
             test_mae = test_mae.item() * int(args.z_range[1])
+
+        train_running_loss = train_running_loss / nb_train_batch
+        test_running_loss = test_running_loss / nb_test_batch
 
         w_b.log_mae(train_mse=train_mae / len(train_dataset), test_mse=test_mae / len(test_dataset), epoch=epoch + 1)
         w_b.log_losses(train_loss=train_running_loss, test_loss=test_running_loss, epoch=epoch + 1)
