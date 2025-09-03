@@ -110,6 +110,7 @@ class AutofocusDatasetFromMetadata(Dataset):
 
         return {"X": tensor_image, "y": z_value}
 
+
 class AutofocusDatasetFromList(Dataset):
     def __init__(self, images_list: List[str], ann_list: List[str], z_range: Union[List, None] = None,
                  normalize_output=False,
@@ -139,7 +140,6 @@ class AutofocusDatasetFromList(Dataset):
                 return i.get("value")
 
         raise "Focus difference tags was not found"
-
 
     def __getitem__(self, idx):
         img_path = self.images_list[idx]

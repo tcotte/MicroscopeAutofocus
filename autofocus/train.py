@@ -5,6 +5,7 @@ Deep learning autofocus: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8803042/#r
 import argparse
 import logging
 import os
+import json
 
 import albumentations as A
 import numpy as np
@@ -118,6 +119,13 @@ else:
         xy_positions = list(set([os.path.basename(os.path.dirname(i)) for i in X]))
         train_positions, test_positions, _, _ = train_test_split(xy_positions, [0] * len(xy_positions), test_size=0.2,
                                                                  random_state=42)
+
+        filename = 'split_data.json'
+        logging.info(f'Split data is stored in {filename}')
+        data = {'train': train_positions, 'test': test_positions}
+        with open(filename, 'w') as f:
+            json.dump(data, f)
+
         X_train = []
         X_test = []
         for element in X:
@@ -132,6 +140,8 @@ else:
     logging.info('Datasets creation...')
     train_dataset = AutofocusDatasetFromMetadata(images_list=X_train, transform=train_transform)
     test_dataset = AutofocusDatasetFromMetadata(images_list=X_test, transform=test_transform)
+
+
 
 
 # Dataloaders

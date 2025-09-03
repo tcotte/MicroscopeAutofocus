@@ -72,7 +72,7 @@ model.classifier = nn.Sequential(*layers)
 if __name__ == "__main__":
     device = get_device()
 
-    model = torch.load(r"C:\Users\tristan_cotte\PycharmProjects\microscope_autofocus\autofocus\checkpoint\run_fixed_large_dataset_last.pt")
+    model = torch.load(r"C:\Users\tristan_cotte\Downloads\90th_epoch_chkpt.pth")
     model.to(device)
     model.eval()
 

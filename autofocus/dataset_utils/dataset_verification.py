@@ -28,6 +28,7 @@ def get_img_file_from_ann_file(annotation_path):
     # else:
     #     label_path = os.path.join(*splitted_path[:-2], "ann", splitted_path[-1] + ".json")
     return img_path
+
 path_dataset = r"C:\Users\tristan_cotte\PycharmProjects\prior_controller\output_picture\acquisition_first_slide"
 
 if __name__ == "__main__":
