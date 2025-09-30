@@ -37,14 +37,13 @@ test_transform = A.Compose([
 ])
 
 # Pytorch datasets
-# train_dataset = AutofocusDataset(
+# test_dataset = AutofocusDataset(
 #     project_dir=r"C:\Users\tristan_cotte\PycharmProjects\prior_controller\output_picture\dataset_Z\slide5",
 #     dataset="68610x_26972y", transform=test_transform)
 # test_dataset = AutofocusDataset(
 #     project_dir=r"C:\Users\tristan_cotte\PycharmProjects\prior_controller\autofocus\sly_project",
 #     dataset="ds1", transform=test_transform)
-path_dataset = os.path.join(r"C:\Users\tristan_cotte\PycharmProjects\prior_controller\output_picture\dataset_Z_sly",
-                            "15408x_25564y")
+path_dataset = os.path.join(r"D:\03 - IDEA\Micronoyaux\Autofocus\test\slide2\70546x_35791y")
 imgs = list(list_images(path_dataset))
 labels = [get_labelfile_from_imgfile(img) for img in imgs]
 train_dataset = AutofocusDatasetFromList(images_list=imgs, ann_list=labels, transform=test_transform)
@@ -72,7 +71,9 @@ model.classifier = nn.Sequential(*layers)
 if __name__ == "__main__":
     device = get_device()
 
-    model = torch.load(r"C:\Users\tristan_cotte\Downloads\90th_epoch_chkpt.pth")
+    model_checkpoint = torch.load(r"C:\Users\tristan_cotte\PycharmProjects\prior_controller\models\autofocus\190th_epoch_chkpt.pt")
+    model.load_state_dict(model_checkpoint['model_state_dict'])
+
     model.to(device)
     model.eval()
 
@@ -82,7 +83,7 @@ if __name__ == "__main__":
 
     with torch.no_grad():
         for idx in tqdm(range(len(train_dataset))):
-            # data = torch.unsqueeze(train_dataset[idx]["X"].float(), dim=0)
+            # data = torch.unsqueeze(test_dataset[idx]["X"].float(), dim=0)
             data = torch.unsqueeze(train_dataset[idx]["X"], dim=0)
             data_visible = train_dataset[idx]["X"].permute(1, 2, 0)
             # plt.imshow(data_visible)

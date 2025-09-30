@@ -8,6 +8,7 @@ import os
 import json
 
 import albumentations as A
+import imutils.paths
 import numpy as np
 import torch
 import torchvision
@@ -75,16 +76,16 @@ torch.backends.cudnn.deterministic = True
 # Augmentations
 train_transform = A.Compose([
     A.Normalize(),
+    A.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.50, rotate_limit=45, p=.75),
     A.augmentations.geometric.resize.LongestMaxSize(max_size=args.img_size),
     A.HorizontalFlip(p=0.5),
     A.VerticalFlip(p=0.5),
     # A.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.50, rotate_limit=45, p=.75),
-    # A.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.50, rotate_limit=45, p=.75),
-    A.OneOf([
-            A.OpticalDistortion(p=0.3),
-            A.GridDistortion(p=.1)]),
-    A.PixelDropout(dropout_prob=0.01),
-    A.RandomBrightnessContrast(p=0.2),
+    # A.OneOf([
+    #         A.OpticalDistortion(p=0.3),
+    #         A.GridDistortion(p=.1)]),
+    # A.PixelDropout(dropout_prob=0.01),
+    # A.RandomBrightnessContrast(p=0.2),
     A.pytorch.transforms.ToTensorV2(),
 ])
 
@@ -98,14 +99,13 @@ test_transform = A.Compose([
 if args.train_set is not None:
     if args.z_range is not None:
         args.z_range = [int(i) for i in args.z_range]
-    train_dataset = AutofocusDataset(
-        project_dir=args.source_project,
-        dataset=args.train_set, transform=train_transform, z_range=args.z_range,
-        normalize_output=args.normalize_output)
-    test_dataset = AutofocusDataset(
-        project_dir=args.source_project,
-        dataset=args.test_set, transform=test_transform, z_range=args.z_range,
-        normalize_output=args.normalize_output)
+    X_train_images = list(imutils.paths.list_images(args.train_set))
+    X_test_images = list(imutils.paths.list_images(args.test_set))
+    # train_dataset = AutofocusDatasetFromMetadata(images_list=X_train_images, transform=train_transform)
+    # test_dataset = AutofocusDatasetFromMetadata(images_list=X_test_images, transform=test_transform)
+
+    train_dataset = AutofocusDatasetFromMetadata(images_list=X_train_images, transform=train_transform)
+    test_dataset = AutofocusDatasetFromMetadata(images_list=X_test_images, transform=test_transform)
 
 else:
     logging.info('Split training and test sets...')
@@ -113,7 +113,6 @@ else:
     if not args.split_by_xy_positions:
         y = len(list(list_images(args.source_project)))*[0] # fake y to compute train_test_split
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
 
     else:
         xy_positions = list(set([os.path.basename(os.path.dirname(i)) for i in X]))
@@ -140,9 +139,6 @@ else:
     logging.info('Datasets creation...')
     train_dataset = AutofocusDatasetFromMetadata(images_list=X_train, transform=train_transform)
     test_dataset = AutofocusDatasetFromMetadata(images_list=X_test, transform=test_transform)
-
-
-
 
 # Dataloaders
 if get_os().lower() == "windows":

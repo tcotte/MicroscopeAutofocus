@@ -166,3 +166,4 @@ autofocus/models
 .dvc/
 .dvc/config
 .dvc/config.local
+output_validation/
