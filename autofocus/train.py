@@ -18,6 +18,8 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torchvision.models import MobileNet_V3_Small_Weights
 from tqdm import tqdm
+
+from autofocus.models import ModifiedMobileViT
 from autofocus_dataset import AutofocusDatasetFromList, AutofocusDatasetFromMetadata
 from logger import WeightandBiaises
 from utils import get_device, get_os
@@ -60,6 +62,9 @@ parser.add_argument("--split_by_xy_positions", default=False, action="store_true
                     help="Instead of split dataset picture by picture, split the dataset depending on XY position")
 parser.add_argument("-norm", "--normalize_output", default=False, action="store_true", required=False,
                     help="Normalize output in range [-1;1]")
+parser.add_argument("-vit", "--mobile_vit", default=False, action="store_true", required=False,
+                    help="Use Mobile Vit instead of MobileNet")
+
 
 args = parser.parse_args()
 
@@ -81,11 +86,11 @@ train_transform = A.Compose([
     A.HorizontalFlip(p=0.5),
     A.VerticalFlip(p=0.5),
     # A.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.50, rotate_limit=45, p=.75),
-    # A.OneOf([
-    #         A.OpticalDistortion(p=0.3),
-    #         A.GridDistortion(p=.1)]),
-    # A.PixelDropout(dropout_prob=0.01),
-    # A.RandomBrightnessContrast(p=0.2),
+    A.OneOf([
+            A.OpticalDistortion(p=0.3),
+            A.GridDistortion(p=.1)]),
+    A.PixelDropout(dropout_prob=0.01),
+    A.RandomBrightnessContrast(p=0.2),
     A.pytorch.transforms.ToTensorV2(),
 ])
 
@@ -152,31 +157,38 @@ test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=T
                              num_workers=num_workers)
 
 ### Model
-
-pretrained_weights = ("pretrained", MobileNet_V3_Small_Weights.IMAGENET1K_V1)
-
-if args.pretrained_weights:
+if not args.mobile_vit:
     pretrained_weights = ("pretrained", MobileNet_V3_Small_Weights.IMAGENET1K_V1)
+
+    if args.pretrained_weights:
+        pretrained_weights = ("pretrained", MobileNet_V3_Small_Weights.IMAGENET1K_V1)
+    else:
+        pretrained_weights = None
+
+    if pretrained_weights:
+        model = torchvision.models.mobilenet_v3_small(weights='DEFAULT', dropout=args.dropout)
+    else:
+        model = torchvision.models.mobilenet_v3_small(dropout=args.dropout)
+
+    # https://medium.com/analytics-vidhya/fastai-image-regression-age-prediction-based-on-image-68294d34f2ed
+
+    layers = []
+    layers += [nn.Linear(in_features=576, out_features=1024)]
+    layers += [nn.BatchNorm1d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)]
+    layers += [nn.Dropout(p=args.dropout)]
+    layers += [nn.Linear(1024, 512, bias=True), nn.Hardswish(inplace=True)]
+    layers += [nn.BatchNorm1d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)]
+    layers += [nn.Dropout(p=args.dropout)]
+    layers += [nn.Linear(512, 16, bias=True), nn.Hardswish(inplace=True)]
+    layers += [nn.Linear(16, 1)]
+    model.classifier = nn.Sequential(*layers)
+
 else:
-    pretrained_weights = None
+    model = ModifiedMobileViT(num_classes=576,
+                              mode='xx_small',
+                              image_size=tuple(train_dataset[0]['X'].size()[1:]),
+                              drop_out=args.dropout)
 
-if pretrained_weights:
-    model = torchvision.models.mobilenet_v3_small(weights='DEFAULT', dropout=args.dropout)
-else:
-    model = torchvision.models.mobilenet_v3_small(dropout=args.dropout)
-
-# https://medium.com/analytics-vidhya/fastai-image-regression-age-prediction-based-on-image-68294d34f2ed
-
-layers = []
-layers += [nn.Linear(in_features=576, out_features=1024)]
-layers += [nn.BatchNorm1d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)]
-layers += [nn.Dropout(p=args.dropout)]
-layers += [nn.Linear(1024, 512, bias=True), nn.Hardswish(inplace=True)]
-layers += [nn.BatchNorm1d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)]
-layers += [nn.Dropout(p=args.dropout)]
-layers += [nn.Linear(512, 16, bias=True), nn.Hardswish(inplace=True)]
-layers += [nn.Linear(16, 1)]
-model.classifier = nn.Sequential(*layers)
 
 criterion = nn.SmoothL1Loss()
 optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)

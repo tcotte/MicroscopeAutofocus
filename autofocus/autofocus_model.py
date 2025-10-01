@@ -41,7 +41,7 @@ if __name__ == "__main__":
     pretrained_weights = None
 
     model = RegressionMobilenet(*_mobilenet_v3_conf("mobilenet_v3_small"), dropout=0.4, weights=pretrained_weights)
-    model.load_state_dict(torch.load("models/Run_complex_model_filtered_ds.pt", map_location=torch.device(device)))
+    model.load_state_dict(torch.load("../models/Run_complex_model_filtered_ds.pt", map_location=torch.device(device)))
     print("ok")
 
     print('model size: {:.3f}MB'.format(get_model_size(model)))

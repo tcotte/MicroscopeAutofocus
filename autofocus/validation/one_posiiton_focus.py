@@ -90,7 +90,7 @@ model.classifier = nn.Sequential(*layers)
 if __name__ == "__main__":
     device = get_device()
 
-    model_checkpoint = torch.load(r'C:\Users\tristan_cotte\Downloads\100th_epoch_chkpt.pt')
+    model_checkpoint = torch.load(r'../../models/fearless-dragon_140th_epoch_chkpt.pt')
     model.load_state_dict(model_checkpoint['model_state_dict'])
     model.to(device)
     model.eval()

@@ -162,7 +162,7 @@ dataset/
 autofocus/wandb
 wandb/
 autofocus/data/*
-autofocus/models
+models
 .dvc/
 .dvc/config
 .dvc/config.local
