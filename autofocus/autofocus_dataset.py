@@ -9,6 +9,7 @@ import cv2
 import exif
 import numpy as np
 import pandas as pd
+import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import transforms
@@ -127,12 +128,24 @@ class DifferenceAFDataset(Dataset):
             transformed = self._transform(image=norm_image)
             tensor_image = transformed["image"]
 
-        return {'X': tensor_image, 'y': y}
+        return {'X': tensor_image, 'y': y, 'std': torch.tensor(self.luminance_weighted_std(img_np=image_z1))}
+
+    @staticmethod
+    def luminance_weighted_std(img_np: np.ndarray) -> float:
+        std_image = 0
+        # [0.114, 0.587, 0.299] -> BGR luminance weights
+        for c, coeff in zip(range(img_np.shape[2]), [0.114, 0.587, 0.299]):
+            channel = img_np[..., c]
+            std = channel.std()
+            std_image += std * coeff
+
+        return std_image
 
     @staticmethod
     def transform_to_grayscale(img_np: np.ndarray) -> np.ndarray:
+
         grayscale_image = np.zeros(img_np.shape[:2])
-        luminance_weights = [0.299, 0.587, 0.114]
+        luminance_weights = [0.114, 0.587, 0.299]
 
         for index, weight in enumerate(luminance_weights):
             grayscale_image += weight * img_np[..., index]

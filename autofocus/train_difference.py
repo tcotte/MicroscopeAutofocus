@@ -3,22 +3,18 @@ Regression accuracies: https://machinelearningmastery.com/regression-metrics-for
 Deep learning autofocus: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8803042/#r24
 """
 import argparse
-import json
-import logging
 import os
 
 import albumentations as A
-import imutils.paths
 import numpy as np
 import torch
-from imutils.paths import list_images
-from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from autofocus.models import MobileNetV3_Regressor
-from autofocus_dataset import AutofocusDatasetFromMetadata, DifferenceAFDataset
+from loss import SampleWeightsLoss
+from models import MobileNetV3_Regressor
+from autofocus_dataset import DifferenceAFDataset
 from logger import WeightandBiaises
 from utils import get_device, get_os
 
@@ -62,6 +58,8 @@ parser.add_argument("-norm", "--normalize_output", default=False, action="store_
                     help="Normalize output in range [-1;1]")
 parser.add_argument("-vit", "--mobile_vit", default=False, action="store_true", required=False,
                     help="Use Mobile Vit instead of MobileNet")
+parser.add_argument("-sw", "--sample_weights_loss", default=False, action="store_true", required=False,
+                    help="Use sample weights loss described in WSI system using deep learning-based automated focusing")
 
 
 args = parser.parse_args()
@@ -104,7 +102,7 @@ test_path = args.test_set
 
 train_dataset = DifferenceAFDataset(excel_filepath=os.path.join(train_path, 'train.xlsx'), image_folder=train_path,
                                     transform=train_transform)
-test_dataset = DifferenceAFDataset(excel_filepath=os.path.join(train_path, 'test.xlsx'), image_folder=test_path,
+test_dataset = DifferenceAFDataset(excel_filepath=os.path.join(test_path, 'test.xlsx'), image_folder=test_path,
                                    transform=test_transform)
 
 # Dataloaders
@@ -121,8 +119,16 @@ test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=T
 ### Model
 model = MobileNetV3_Regressor(pretrained=args.pretrained_weights, dropout=args.dropout)
 
-criterion = nn.SmoothL1Loss()
+if not args.sample_weights_loss:
+    criterion = nn.SmoothL1Loss()
+
+else:
+    criterion = SampleWeightsLoss()
+
+# Optimizer parameters written in the paper
 optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9)
+scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
+
 
 ### Training
 
@@ -162,12 +168,13 @@ if __name__ == "__main__":
                 # get the inputs; data is a list of [inputs, labels]
                 images, labels = batch["X"].float(), batch["y"]
 
+                std = batch['std'].float().to(device)
+
                 images = images.to(device)
                 labels = labels.to(device)
-                # zero the parameter gradients
+
                 optimizer.zero_grad()
 
-                # forward + backward + optimize
                 outputs = model(images)
                 train_loss = criterion(outputs.squeeze(), labels)
                 train_loss.backward()
@@ -193,6 +200,9 @@ if __name__ == "__main__":
 
                 test_running_loss += test_loss.item()
 
+        current_lr = optimizer.param_groups[0]['lr']
+        scheduler.step()
+
         if not args.normalize_output:
             w_b.log_table(outputs.squeeze(), images, labels, epoch + 1)
         else:
@@ -203,6 +213,7 @@ if __name__ == "__main__":
         train_running_loss = train_running_loss / nb_train_batch
         test_running_loss = test_running_loss / nb_test_batch
 
+        w_b.log_lr(lr=current_lr, epoch=epoch + 1)
         w_b.log_mae(train_mse=train_mae / len(train_dataset), test_mse=test_mae / len(test_dataset), epoch=epoch + 1)
         w_b.log_losses(train_loss=train_running_loss, test_loss=test_running_loss, epoch=epoch + 1)
 

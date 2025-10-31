@@ -46,6 +46,16 @@ class WeightandBiaises:
         bool_commit = True
         wandb.log({"Train/Loss": train_loss, "Test/Loss": test_loss}, step=epoch, commit=bool_commit)
 
+    def log_lr(self, lr: float, epoch: int) -> None:
+        """
+        Log train and test losses in separate panels.
+        :param test_loss:
+        :param train_loss: average train loss for the current epoch.
+        :param train_loss: average test loss for the current epoch.
+        :param epoch: current epoch.
+        """
+        wandb.log({"LR": lr}, step=epoch)
+
     def log_mae(self, train_mse: float, test_mse: float, epoch: int) -> None:
         """
         Log MSE accuracy.

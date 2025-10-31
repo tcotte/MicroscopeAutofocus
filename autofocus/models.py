@@ -64,10 +64,12 @@ class MobileNetV3_Regressor(nn.Module):
             base = torchvision.models.mobilenet_v3_small(dropout=dropout)
 
         self.features = base.features  # everything up to the last feature map
+        self.pool = nn.AdaptiveAvgPool2d((7, 7))
         self.fc = nn.Linear(576 * 7 * 7, 1)  # single scalar output
 
     def forward(self, x):
         x = self.features(x)
+        x = self.pool(x)
         x = torch.flatten(x, 1)  # flatten all dims except batch
         x = self.fc(x)
         return x
@@ -78,12 +80,6 @@ if __name__ == '__main__':
     # x = torch.randn(2, 3, 224, 224)
     # print(model(x))
 
-    model = torchvision.models.mobilenet_v3_small(dropout=0)
-    print(model.classifier)
-    model.classifier = nn.Sequential(
-        nn.Linear(in_features=576, out_features=1024, bias=True),
-        nn.Hardswish(),
-        nn.Dropout(p=0, inplace=True),
-        nn.Linear(in_features=1024, out_features=1000, bias=True),
-        nn.Linear(in_features=1000, out_features=1, bias=True)
-    )
+    model = MobileNetV3_Regressor()
+    x = torch.randn(2, 3, 612, 512)
+    print(model(x))
