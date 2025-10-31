@@ -3,24 +3,22 @@ Regression accuracies: https://machinelearningmastery.com/regression-metrics-for
 Deep learning autofocus: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8803042/#r24
 """
 import argparse
+import json
 import logging
 import os
-import json
 
 import albumentations as A
 import imutils.paths
 import numpy as np
 import torch
-import torchvision
 from imutils.paths import list_images
 from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import DataLoader
-from torchvision.models import MobileNet_V3_Small_Weights
 from tqdm import tqdm
 
-from autofocus.models import ModifiedMobileViT
-from autofocus_dataset import AutofocusDatasetFromList, AutofocusDatasetFromMetadata
+from autofocus.models import MobileNetV3_Regressor
+from autofocus_dataset import AutofocusDatasetFromMetadata, DifferenceAFDataset
 from logger import WeightandBiaises
 from utils import get_device, get_os
 
@@ -101,49 +99,13 @@ test_transform = A.Compose([
 ])
 
 # Pytorch datasets
-if args.train_set is not None:
-    if args.z_range is not None:
-        args.z_range = [int(i) for i in args.z_range]
-    X_train_images = list(imutils.paths.list_images(args.train_set))
-    X_test_images = list(imutils.paths.list_images(args.test_set))
-    # train_dataset = AutofocusDatasetFromMetadata(images_list=X_train_images, transform=train_transform)
-    # test_dataset = AutofocusDatasetFromMetadata(images_list=X_test_images, transform=test_transform)
+train_path = args.train_set
+test_path = args.test_set
 
-    train_dataset = AutofocusDatasetFromMetadata(images_list=X_train_images, transform=train_transform)
-    test_dataset = AutofocusDatasetFromMetadata(images_list=X_test_images, transform=test_transform)
-
-else:
-    logging.info('Split training and test sets...')
-    X = list(list_images(args.source_project))
-    if not args.split_by_xy_positions:
-        y = len(list(list_images(args.source_project)))*[0] # fake y to compute train_test_split
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    else:
-        xy_positions = list(set([os.path.basename(os.path.dirname(i)) for i in X]))
-        train_positions, test_positions, _, _ = train_test_split(xy_positions, [0] * len(xy_positions), test_size=0.2,
-                                                                 random_state=42)
-
-        filename = 'split_data.json'
-        logging.info(f'Split data is stored in {filename}')
-        data = {'train': train_positions, 'test': test_positions}
-        with open(filename, 'w') as f:
-            json.dump(data, f)
-
-        X_train = []
-        X_test = []
-        for element in X:
-            if os.path.basename(os.path.dirname(element)) in train_positions:
-                X_train.append(element)
-            else:
-                X_test.append(element)
-
-        y_train = [0]*len(X_train)
-        y_test = [0]*len(X_test)
-
-    logging.info('Datasets creation...')
-    train_dataset = AutofocusDatasetFromMetadata(images_list=X_train, transform=train_transform)
-    test_dataset = AutofocusDatasetFromMetadata(images_list=X_test, transform=test_transform)
+train_dataset = DifferenceAFDataset(excel_filepath=os.path.join(train_path, 'train.xlsx'), image_folder=train_path,
+                                    transform=train_transform)
+test_dataset = DifferenceAFDataset(excel_filepath=os.path.join(train_path, 'test.xlsx'), image_folder=test_path,
+                                   transform=test_transform)
 
 # Dataloaders
 if get_os().lower() == "windows":
@@ -157,41 +119,10 @@ test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=T
                              num_workers=num_workers)
 
 ### Model
-if not args.mobile_vit:
-    pretrained_weights = ("pretrained", MobileNet_V3_Small_Weights.IMAGENET1K_V1)
-
-    if args.pretrained_weights:
-        pretrained_weights = ("pretrained", MobileNet_V3_Small_Weights.IMAGENET1K_V1)
-    else:
-        pretrained_weights = None
-
-    if pretrained_weights:
-        model = torchvision.models.mobilenet_v3_small(weights='DEFAULT', dropout=args.dropout)
-    else:
-        model = torchvision.models.mobilenet_v3_small(dropout=args.dropout)
-
-    # https://medium.com/analytics-vidhya/fastai-image-regression-age-prediction-based-on-image-68294d34f2ed
-
-    layers = []
-    layers += [nn.Linear(in_features=576, out_features=1024)]
-    layers += [nn.BatchNorm1d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)]
-    layers += [nn.Dropout(p=args.dropout)]
-    layers += [nn.Linear(1024, 512, bias=True), nn.Hardswish(inplace=True)]
-    layers += [nn.BatchNorm1d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)]
-    layers += [nn.Dropout(p=args.dropout)]
-    layers += [nn.Linear(512, 16, bias=True), nn.Hardswish(inplace=True)]
-    layers += [nn.Linear(16, 1)]
-    model.classifier = nn.Sequential(*layers)
-
-else:
-    model = ModifiedMobileViT(num_classes=576,
-                              mode='xx_small',
-                              image_size=tuple(train_dataset[0]['X'].size()[1:]),
-                              drop_out=args.dropout)
-
+model = MobileNetV3_Regressor(pretrained=args.pretrained_weights, dropout=args.dropout)
 
 criterion = nn.SmoothL1Loss()
-optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9)
 
 ### Training
 

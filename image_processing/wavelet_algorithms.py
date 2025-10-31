@@ -58,5 +58,8 @@ if __name__ == '__main__':
 
     fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(15, 8))
     ax[0].plot(list_g)
+    ax[0].set_title('Sharpness detection with Wavelet Algorithm')
+    ax[0].set_xlabel('Z position (µm)')
+    ax[0].set_ylabel('Sharpness value (UA)')
     ax[1].plot(list_gt)
     plt.show()

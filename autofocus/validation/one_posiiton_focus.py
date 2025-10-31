@@ -10,6 +10,7 @@ from torch import nn
 from tqdm import tqdm
 
 from autofocus.autofocus_dataset import get_labelfile_from_imgfile, AutofocusDatasetFromMetadata
+from autofocus.models import ModifiedMobileViT
 from autofocus.utils import get_device
 
 BATCH_SIZE = 64
@@ -90,12 +91,24 @@ model.classifier = nn.Sequential(*layers)
 if __name__ == "__main__":
     device = get_device()
 
-    model_checkpoint = torch.load(r'../../models/fearless-dragon_140th_epoch_chkpt.pt')
-    model.load_state_dict(model_checkpoint['model_state_dict'])
+    model_path = r'../models/mobile_vit.pt'
+    # checkpoint
+    try:
+        model_checkpoint = torch.load(model_path)
+        model.load_state_dict(model_checkpoint['model_state_dict'])
+
+    # no checkpoint + Vit
+    except KeyError:
+        model = ModifiedMobileViT(num_classes=576,
+                                  mode='xx_small',
+                                  image_size=(420, 420),
+                                  drop_out=0)
+        model.load_state_dict(torch.load(model_path))
+
     model.to(device)
     model.eval()
 
-    path_test_dataset = r'D:\03 - IDEA\Micronoyaux\Autofocus\dataset_09_25_2025\X\test'
+    path_test_dataset = r'D:\03 - IDEA\Micronoyaux\Autofocus\test\slide2'
 
     unnormalizer = UnNormalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
 
@@ -137,8 +150,8 @@ if __name__ == "__main__":
         ax0.set_title(f"RMSE {rmse:.2f}")
         ax0.plot(y, y)
         ax0.scatter(y, y_hat, c='r')
-        ax0.set_xlabel('Z distance from focus (µm)')
-        ax0.set_ylabel('Predicted Z distance from focus (µm)')
+        ax0.set_xlabel('Z distance_af from focus (µm)')
+        ax0.set_ylabel('Predicted Z distance_af from focus (µm)')
         ax1.imshow(torch.squeeze(focus_image).permute(1, 2, 0).cpu().numpy())
         plt.show()
         # plt.savefig(os.path.join(r'C:\Users\tristan_cotte\PycharmProjects\microscope_autofocus\output_validation\test',

@@ -55,7 +55,7 @@ class WeightandBiaises:
         """
         wandb.log({"Train/RMSE": train_mse, "Test/RMSE": test_mse}, step=epoch)
 
-    def save_model(self, model_name: str, model: RegressionMobilenet) -> None:
+    def save_model(self, model_name: str, model: torch.nn.Module) -> None:
         # final_model_dir = "last_model"
         #
         # trained_model_artifact = wandb.Artifact(

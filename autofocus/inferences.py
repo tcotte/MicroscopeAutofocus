@@ -98,8 +98,8 @@ if __name__ == "__main__":
     plt.title(f"RMSE {rmse:.2f}")
     plt.plot(y, y)
     plt.scatter(y, y_hat, c='r')
-    plt.xlabel('Z distance from focus (µm)')
-    plt.ylabel('Predicted Z distance from focus (µm)')
+    plt.xlabel('Z distance_af from focus (µm)')
+    plt.ylabel('Predicted Z distance_af from focus (µm)')
     plt.show()
 
 

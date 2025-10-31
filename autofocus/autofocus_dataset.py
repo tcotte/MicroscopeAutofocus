@@ -4,8 +4,11 @@ import platform
 import time
 from timeit import timeit
 from typing import Union, List
+
+import cv2
 import exif
 import numpy as np
+import pandas as pd
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import transforms
@@ -68,6 +71,83 @@ from torchvision.transforms import transforms
 #             tensor_image = transformed["image"]
 #
 #         return {"X": tensor_image, "y": z_value}
+
+class DifferenceAFDataset(Dataset):
+    def __init__(self, excel_filepath: str, image_folder: str, kernel_size: int= 3, transform=None,
+                 one_channel_image: bool = False):
+        self._excel_filepath = excel_filepath
+
+        self._image_folder = image_folder
+
+        self._df = pd.read_excel(excel_filepath)
+
+        self._kernel_size = kernel_size
+
+        self._transform = transform
+
+        self._one_channel_image = one_channel_image
+
+    def __len__(self) -> int:
+        return len(self._df)
+
+    def __getitem__(self, idx):
+        item = self._df.iloc[idx]
+        z1_image_name = item['z1_image']
+        z2_image_name = item['z2_image']
+        xy_position = item['xy_position']
+
+        image_z1_path = os.path.join(self._image_folder, xy_position, z1_image_name)
+        image_z2_path = os.path.join(self._image_folder, xy_position, z2_image_name)
+
+        image_z1 = cv2.imread(image_z1_path)
+        image_z2 = cv2.imread(image_z2_path)
+
+        blurred_image_z1 = cv2.medianBlur(image_z1, self._kernel_size)
+        blurred_image_z2 = cv2.medianBlur(image_z2, self._kernel_size)
+
+        # difference_image = cv2.subtract(blurred_image_z2, blurred_image_z1)
+        difference_image = blurred_image_z2 - blurred_image_z1
+
+        blurred_difference_image = np.float32(cv2.medianBlur(difference_image, self._kernel_size))
+
+        y = float(item['z2_diff_focus'])
+
+        norm_image = self.normalize_standard_channelwise(img_np=blurred_difference_image)
+
+        if self._one_channel_image:
+            norm_image = cv2.cvtColor(norm_image, cv2.COLOR_BGR2GRAY)
+
+        if self._transform is None:
+            transform = transforms.ToTensor()
+
+            # Convert the image to PyTorch tensor
+            tensor_image = transform(norm_image)
+
+        else:
+            transformed = self._transform(image=norm_image)
+            tensor_image = transformed["image"]
+
+        return {'X': tensor_image, 'y': y}
+
+    @staticmethod
+    def transform_to_grayscale(img_np: np.ndarray) -> np.ndarray:
+        grayscale_image = np.zeros(img_np.shape[:2])
+        luminance_weights = [0.299, 0.587, 0.114]
+
+        for index, weight in enumerate(luminance_weights):
+            grayscale_image += weight * img_np[..., index]
+
+        return grayscale_image
+
+    @staticmethod
+    def normalize_standard_channelwise(img_np):
+        norm = np.zeros_like(img_np)
+        for c in range(img_np.shape[2]):
+            channel = img_np[..., c]
+            mean, std = channel.mean(), channel.std()
+            norm[..., c] = (channel - mean) / std
+        return norm
+
 
 class AutofocusDatasetFromMetadata(Dataset):
     def __init__(self, images_list: List[str], z_range: Union[List, None] = None, normalize_output=False,
@@ -181,11 +261,19 @@ def get_os() -> str:
 if __name__ == "__main__":
     from imutils.paths import list_images
 
-    path_dataset = r"C:\Users\tristan_cotte\PycharmProjects\microscope_autofocus\autofocus\data\dataset_v1\X\slide_3"
-    imgs = list(list_images(path_dataset))
-    labels = [get_labelfile_from_imgfile(img) for img in imgs]
+    # path_dataset = r"C:\Users\tristan_cotte\PycharmProjects\microscope_autofocus\autofocus\data\dataset_v1\X\slide_3"
+    # imgs = list(list_images(path_dataset))
+    # labels = [get_labelfile_from_imgfile(img) for img in imgs]
+    #
+    # train_dataset = AutofocusDatasetFromList(images_list=imgs, ann_list=labels)
+    #
+    # print(train_dataset[8])
+    # print(len(train_dataset))
+    import matplotlib.pyplot as plt
 
-    train_dataset = AutofocusDatasetFromList(images_list=imgs, ann_list=labels)
-
-    print(train_dataset[8])
-    print(len(train_dataset))
+    ds = DifferenceAFDataset(excel_filepath=r'data/diff_train.xlsx',
+                             image_folder=r'data\dataset_09_25_2025\X\train')
+    image, y = ds[0]
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    plt.imshow(gray_image, cmap='gray', vmin=-1, vmax=1)
+    plt.show()
