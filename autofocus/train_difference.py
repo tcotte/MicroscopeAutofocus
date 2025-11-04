@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from loss import SampleWeightsLoss
-from models import MobileNetV3_Regressor
+from models import MobileNetV3_Regressor, LightweightNetwork
 from autofocus_dataset import DifferenceAFDataset
 from logger import WeightandBiaises
 from utils import get_device, get_os
@@ -60,6 +60,8 @@ parser.add_argument("-vit", "--mobile_vit", default=False, action="store_true", 
                     help="Use Mobile Vit instead of MobileNet")
 parser.add_argument("-sw", "--sample_weights_loss", default=False, action="store_true", required=False,
                     help="Use sample weights loss described in WSI system using deep learning-based automated focusing")
+parser.add_argument("-lwn", "--lightweight_network", default=False, action="store_true", required=False,
+                    help="Use lightweight network instead of MobileNetv3")
 
 
 args = parser.parse_args()
@@ -82,11 +84,11 @@ train_transform = A.Compose([
     A.HorizontalFlip(p=0.5),
     A.VerticalFlip(p=0.5),
     # A.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.50, rotate_limit=45, p=.75),
-    A.OneOf([
-            A.OpticalDistortion(p=0.3),
-            A.GridDistortion(p=.1)]),
-    A.PixelDropout(dropout_prob=0.01),
-    A.RandomBrightnessContrast(p=0.2),
+    # A.OneOf([
+    #         A.OpticalDistortion(p=0.3),
+    #         A.GridDistortion(p=.1)]),
+    # A.PixelDropout(dropout_prob=0.01),
+    # A.RandomBrightnessContrast(p=0.2),
     A.pytorch.transforms.ToTensorV2(),
 ])
 
@@ -117,7 +119,10 @@ test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=T
                              num_workers=num_workers)
 
 ### Model
-model = MobileNetV3_Regressor(pretrained=args.pretrained_weights, dropout=args.dropout)
+if not args.lightweight_network:
+    model = MobileNetV3_Regressor(pretrained=args.pretrained_weights, dropout=args.dropout)
+else:
+    model = LightweightNetwork()
 
 if not args.sample_weights_loss:
     criterion = nn.SmoothL1Loss()

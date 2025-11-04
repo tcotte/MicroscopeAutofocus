@@ -3,6 +3,7 @@ import os
 import torch
 import torchvision
 import torch.nn as nn
+import torch.nn.functional as F
 import sys
 
 sys.path.insert(0,'autofocus/mobile-vit-pytorch/mobile_vit')
@@ -75,11 +76,68 @@ class MobileNetV3_Regressor(nn.Module):
         return x
 
 
+class LightweightNetwork(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.conv_b1_1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, stride=1, padding=1)
+        self.conv_b1_2 = nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, stride=1, padding=1)
+        self.bn1 = nn.BatchNorm2d(32)
+
+        self.maxpool = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.conv_b2_1 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1)
+        self.conv_b2_2 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1)
+        self.conv_b2_3 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1)
+        self.bn2 = nn.BatchNorm2d(64)
+
+        self.conv_b3_1 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1)
+        self.conv_b3_2 = nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=1)
+        self.conv_b3_3 = nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=1)
+        self.bn3 = nn.BatchNorm2d(128)
+
+        self.conv_b4 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=1)
+
+        self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(in_features=256, out_features=1)
+
+    def forward(self, x):
+        x = F.relu(self.conv_b1_1(x))
+        x = self.bn1(x)
+        x = F.relu(self.conv_b1_2(x))
+        x = self.bn1(x)
+        x = self.maxpool(x)
+
+        x = F.relu(self.conv_b2_1(x))
+        x = self.bn2(x)
+        x = F.relu(self.conv_b2_2(x))
+        x = self.bn2(x)
+        x = F.relu(self.conv_b2_3(x))
+        x = self.bn2(x)
+        x = self.maxpool(x)
+
+        x = F.relu(self.conv_b3_1(x))
+        x = self.bn3(x)
+        x = F.relu(self.conv_b3_2(x))
+        x = self.bn3(x)
+        x = F.relu(self.conv_b3_3(x))
+        x = self.bn3(x)
+        x = self.maxpool(x)
+
+        x = F.relu(self.conv_b4(x))
+
+        x = self.global_avg_pool(x)
+        x = x.view(x.size(0), -1)
+
+        return self.fc(x)
+
+
+
 if __name__ == '__main__':
     # model = ModifiedMobileViT(image_size=(224, 224), num_classes=576, mode='xx_small', drop_out=0.1)
     # x = torch.randn(2, 3, 224, 224)
     # print(model(x))
 
-    model = MobileNetV3_Regressor()
-    x = torch.randn(2, 3, 612, 512)
+    model = LightweightNetwork()
+    x = torch.randn(2, 3, 512, 512)
     print(model(x))
