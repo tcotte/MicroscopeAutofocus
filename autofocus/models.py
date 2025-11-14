@@ -6,8 +6,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import sys
 
-sys.path.insert(0,'autofocus/mobile-vit-pytorch/mobile_vit')
-sys.path.insert(0,'../autofocus/mobile-vit-pytorch/mobile_vit')
+sys.path.insert(0, 'autofocus/mobile-vit-pytorch/mobile_vit')
+sys.path.insert(0, '../autofocus/mobile-vit-pytorch/mobile_vit')
 
 from mobilevit_v3_v1 import MobileViTv3_v1  #
 
@@ -57,6 +57,7 @@ class MobileNetV3_Regressor(nn.Module):
     compared to average pooling.
 
     """
+
     def __init__(self, pretrained=True, dropout: float = 0.2):
         super().__init__()
         if pretrained:
@@ -77,6 +78,11 @@ class MobileNetV3_Regressor(nn.Module):
 
 
 class LightweightNetwork(nn.Module):
+    """
+    Network implemented in the paper:
+    https://www.researchgate.net/publication/339096868_Real-Time_Facial_Affective_Computing_on_Mobile_Devices/link/6806ff17ded43315573521bc/download
+    """
+
     def __init__(self):
         super().__init__()
 
@@ -131,6 +137,68 @@ class LightweightNetwork(nn.Module):
 
         return self.fc(x)
 
+class DefocusFCFNN(nn.Module):
+    """
+    Feed-forward network for defocus prediction (the “trainable backend” part of the network).
+    Based on the TensorFlow implementation in Waller-Lab/DeepAutofocus util/defocusnetwork.py. :contentReference[oaicite:0]{index=0}
+    """
+
+    def __init__(self,
+                 input_dim: int,
+                 num_hidden_units: list[int] = [100, 100, 100, 100, 100, 100, 100, 100, 100, 100],
+                 dropout_rate: float = 0.0,
+                 input_dropout_rate: float = 0.6,
+                 regularization_strength: float = 0.0):
+        """
+        :param input_dim: size of the flattened input features (after deterministic part + normalization)
+        :param num_hidden_units: list of hidden‐layer sizes
+        :param dropout_rate: dropout rate applied after each hidden layer (train mode)
+        :param input_dropout_rate: dropout rate applied on the normalized input (train mode)
+        :param regularization_strength: L2 regularization coefficient (weight decay in optimizer)
+        """
+        super().__init__()
+        self.input_dropout_rate = input_dropout_rate
+        self.dropout_rate = dropout_rate
+        self.regularization_strength = regularization_strength
+
+        # Build hidden layers
+        layers = []
+        in_dim = input_dim
+        for i, hidden_dim in enumerate(num_hidden_units):
+            layers.append(nn.Linear(in_dim, hidden_dim))
+            layers.append(nn.ReLU(inplace=True))
+            # (Dropout will be applied in forward)
+            in_dim = hidden_dim
+        self.hidden_layers = nn.Sequential(*layers)
+        # Final output layer
+        self.output_layer = nn.Linear(in_dim, 1)
+
+    def forward(self, x):
+        """
+        Forward pass.
+        :param x: tensor of shape (batch_size, input_dim)
+        :return: tensor of shape (batch_size,) with predicted defocus value
+        """
+        # Input dropout
+        if self.training and (self.input_dropout_rate > 0.0):
+            x = F.dropout(x, p=self.input_dropout_rate, training=True)
+
+        # Hidden layers + dropout
+        h = x
+        # If using nn.Sequential we can't easily interleave dropout layers automatically,
+        # so we’ll apply dropout manually after each hidden layer block.
+        for module in self.hidden_layers:
+            h = module(h)
+            if isinstance(module, nn.ReLU):
+                # after the ReLU, apply dropout
+                if self.training and (self.dropout_rate > 0.0):
+                    h = F.dropout(h, p=self.dropout_rate, training=True)
+
+        # Output layer
+        out = self.output_layer(h)
+        # Squeeze to shape (batch_size,)
+        out = out.view(-1)
+        return out
 
 
 if __name__ == '__main__':
@@ -138,6 +206,6 @@ if __name__ == '__main__':
     # x = torch.randn(2, 3, 224, 224)
     # print(model(x))
 
-    model = LightweightNetwork()
-    x = torch.randn(2, 3, 512, 512)
+    model = DefocusFCFNN(156672)
+    x = torch.randn(8, 156672)
     print(model(x))

@@ -78,6 +78,11 @@ class WeightandBiaises:
         # self.run.log_artifact(trained_model_artifact)
         torch.save(model, os.path.join(wandb.run.dir, model_name))
 
+        # transfer to W&B
+        artifact = wandb.Artifact(name="last", type="model")
+        artifact.add_file(local_path=wandb.run.dir, name="last")
+        wandb.run.log_artifact(artifact)
+
     @staticmethod
     def tensor2image(x) -> np.array:
         """

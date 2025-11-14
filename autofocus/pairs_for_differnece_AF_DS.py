@@ -12,8 +12,8 @@ tolerance: float = 0.5
 
 if __name__ == '__main__':
 
-    train_dataset_folder = r'C:\Users\tristan_cotte\PycharmProjects\microscope_autofocus\autofocus\data\dataset_09_25_2025\X\train'
-    test_dataset_folder = r'C:\Users\tristan_cotte\PycharmProjects\microscope_autofocus\autofocus\data\dataset_09_25_2025\X\test'
+    train_dataset_folder = r'D:\03 - IDEA\Micronoyaux\Autofocus\dataset_11_13_2025\X\train'
+    test_dataset_folder = r'D:\03 - IDEA\Micronoyaux\Autofocus\dataset_11_13_2025\X\test'
 
     for set_folder, set_name in zip([train_dataset_folder, test_dataset_folder], ['train', 'test']):
         df = pd.DataFrame()

@@ -13,7 +13,7 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import transforms
-
+from skimage.io import imread
 
 # class AutofocusDataset(Dataset):
 #     def __init__(self, project_dir: str, dataset: str, z_range: Union[List, None] = None, normalize_output=False,
@@ -74,19 +74,23 @@ from torchvision.transforms import transforms
 #         return {"X": tensor_image, "y": z_value}
 
 class DifferenceAFDataset(Dataset):
-    def __init__(self, excel_filepath: str, image_folder: str, kernel_size: int= 3, transform=None,
+    def __init__(self, df: pd.DataFrame, image_folder: str, kernel_size: int = 3, transform=None,
                  one_channel_image: bool = False):
-        self._excel_filepath = excel_filepath
-
         self._image_folder = image_folder
 
-        self._df = pd.read_excel(excel_filepath)
+        self._df = df
 
         self._kernel_size = kernel_size
 
         self._transform = transform
 
         self._one_channel_image = one_channel_image
+
+    @classmethod
+    def from_excel(cls, excel_filepath: str, image_folder: str, kernel_size: int = 3, transform=None,
+                   one_channel_image: bool = False):
+        return cls(df=pd.read_excel(excel_filepath), image_folder=image_folder, kernel_size=kernel_size,
+                   transform=transform, one_channel_image=one_channel_image)
 
     def __len__(self) -> int:
         return len(self._df)
@@ -160,6 +164,85 @@ class DifferenceAFDataset(Dataset):
             mean, std = channel.mean(), channel.std()
             norm[..., c] = (channel - mean) / std
         return norm
+
+class AutofocusFourierDataset(Dataset):
+    def __init__(self,
+                 images_list: list[str],
+                 crop_size=None,
+                 mean_subtract=True,
+                 normalize=True,
+                 fourier_quadrant_size=256,
+                 transform=None):
+        """
+        :param images_list: list of image composing the dataset
+        :param crop_size: optional (H, W) crop
+        :param mean_subtract: whether to subtract mean intensity
+        :param normalize: whether to divide by std (after mean subtraction)
+        :param fourier_quadrant_size: how large the FFT quadrant to use (e.g., 256x256)
+        :param transform: optional transform applied to the raw image
+        """
+
+        self.images_list = images_list
+        self.crop_size = crop_size
+        self.mean_subtract = mean_subtract
+        self.normalize = normalize
+        self.fourier_quadrant_size = fourier_quadrant_size
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.images_list)
+
+    @staticmethod
+    def get_focus_diff_from_exif_metadata(img_path: str) -> float:
+        return float(exif.Image(img_path).make)
+
+    def __getitem__(self, idx):
+        img_path = self.images_list[idx]
+        z_value = self.get_focus_diff_from_exif_metadata(img_path=img_path)
+
+        img = imread(img_path).astype(np.float32)
+        if img.ndim == 3:  # RGB → grayscale
+            img = np.mean(img, axis=2)
+
+        # --- Optional crop ---
+        if self.crop_size is not None:
+            H, W = img.shape
+            ch, cw = self.crop_size
+            top = (H - ch) // 2
+            left = (W - cw) // 2
+            img = img[top:top + ch, left:left + cw]
+
+        # --- Mean subtraction & normalization ---
+        if self.mean_subtract:
+            img -= img.mean()
+        if self.normalize:
+            img /= (img.std() + 1e-8)
+
+        if self.transform is None:
+            transform = transforms.ToTensor()
+
+            # Convert the image to PyTorch tensor
+            tensor_image = transform(img)
+
+        else:
+            transformed = self.transform(image=np.array(img))
+            tensor_image = transformed["image"]
+
+        # --- 2D Fourier transform ---
+        fft = np.fft.fftshift(np.fft.fft2(tensor_image))
+        magnitude = np.abs(fft)
+        # Optionally log-scale magnitude (helps dynamic range)
+        magnitude = np.log1p(magnitude)
+
+        # --- Extract one quadrant (upper left) ---
+        q = self.fourier_quadrant_size
+        center_y, center_x = magnitude.shape[0] // 2, magnitude.shape[1] // 2
+        quadrant = magnitude[:q, :q]
+
+        # --- Flatten features ---
+        features = torch.from_numpy(quadrant.astype(np.float32)).flatten()
+
+        return {"X": features, "y": z_value}
 
 
 class AutofocusDatasetFromMetadata(Dataset):
@@ -284,9 +367,12 @@ if __name__ == "__main__":
     # print(len(train_dataset))
     import matplotlib.pyplot as plt
 
-    ds = DifferenceAFDataset(excel_filepath=r'data/diff_train.xlsx',
-                             image_folder=r'data\dataset_09_25_2025\X\train')
-    image, y = ds[0]
-    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    plt.imshow(gray_image, cmap='gray', vmin=-1, vmax=1)
+    ds = AutofocusFourierDataset(images_list=list(list_images(r'C:\Users\tristan_cotte\PycharmProjects\microscope_autofocus\autofocus\data\dataset_09_25_2025\X\train')))
+
+    # ds = DifferenceAFDataset(excel_filepath=r'data/diff_train.xlsx',
+    #                          image_folder=r'data\dataset_09_25_2025\X\train')
+    data = ds[0]
+    # gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # plt.imshow(data['X'], cmap='gray')
+    print(data['X'].size())
     plt.show()

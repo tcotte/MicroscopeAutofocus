@@ -3,18 +3,24 @@ Regression accuracies: https://machinelearningmastery.com/regression-metrics-for
 Deep learning autofocus: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8803042/#r24
 """
 import argparse
+import logging
 import os
+import json
 
 import albumentations as A
+import imutils.paths
 import numpy as np
 import torch
+import torchvision
+from imutils.paths import list_images
+from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import DataLoader
+from torchvision.models import MobileNet_V3_Small_Weights
 from tqdm import tqdm
 
-from loss import SampleWeightsLoss
-from models import MobileNetV3_Regressor, LightweightNetwork
-from autofocus_dataset import DifferenceAFDataset
+from autofocus.models import ModifiedMobileViT, DefocusFCFNN
+from autofocus_dataset import AutofocusDatasetFromList, AutofocusDatasetFromMetadata, AutofocusFourierDataset
 from logger import WeightandBiaises
 from utils import get_device, get_os
 
@@ -41,7 +47,7 @@ parser.add_argument('-sz', '--img_size', type=int, default=512, required=False,
                     help='Training img size')
 parser.add_argument('-do', '--dropout', type=float, default=0.2, required=False,
                     help='Dropout used for the training')
-parser.add_argument('-lr', '--learning_rate', type=float, default=0.001, required=False,
+parser.add_argument('-lr', '--learning_rate', type=float, default=0.00002, required=False,
                     help='Learning rate used for training')
 parser.add_argument('-project', '--project_name', type=str, default="Microscope_autofocus", required=False,
                     help='Name of the project in W&B')
@@ -58,10 +64,6 @@ parser.add_argument("-norm", "--normalize_output", default=False, action="store_
                     help="Normalize output in range [-1;1]")
 parser.add_argument("-vit", "--mobile_vit", default=False, action="store_true", required=False,
                     help="Use Mobile Vit instead of MobileNet")
-parser.add_argument("-sw", "--sample_weights_loss", default=False, action="store_true", required=False,
-                    help="Use sample weights loss described in WSI system using deep learning-based automated focusing")
-parser.add_argument("-lwn", "--lightweight_network", default=False, action="store_true", required=False,
-                    help="Use lightweight network instead of MobileNetv3")
 
 
 args = parser.parse_args()
@@ -99,13 +101,14 @@ test_transform = A.Compose([
 ])
 
 # Pytorch datasets
-train_path = args.train_set
-test_path = args.test_set
 
-train_dataset = DifferenceAFDataset.from_excel(excel_filepath=os.path.join(train_path, 'train.xlsx'),
-                                               image_folder=train_path, transform=train_transform)
-test_dataset = DifferenceAFDataset.from_excel(excel_filepath=os.path.join(test_path, 'test.xlsx'),
-                                              image_folder=test_path, transform=test_transform)
+X_train_images = list(imutils.paths.list_images(args.train_set))
+X_test_images = list(imutils.paths.list_images(args.test_set))
+# train_dataset = AutofocusDatasetFromMetadata(images_list=X_train_images, transform=train_transform)
+# test_dataset = AutofocusDatasetFromMetadata(images_list=X_test_images, transform=test_transform)
+
+train_dataset = AutofocusFourierDataset(images_list=X_train_images, transform=train_transform)
+test_dataset = AutofocusFourierDataset(images_list=X_test_images, transform=test_transform)
 
 # Dataloaders
 if get_os().lower() == "windows":
@@ -119,21 +122,11 @@ test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=T
                              num_workers=num_workers)
 
 ### Model
-if not args.lightweight_network:
-    model = MobileNetV3_Regressor(pretrained=args.pretrained_weights, dropout=args.dropout)
-else:
-    model = LightweightNetwork()
+model = DefocusFCFNN(input_dim=train_dataset[0]['X'].size()[0], input_dropout_rate=0.6)
 
-if not args.sample_weights_loss:
-    criterion = nn.SmoothL1Loss()
 
-else:
-    criterion = SampleWeightsLoss()
-
-# Optimizer parameters written in the paper
-optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
-
+criterion = nn.MSELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
 ### Training
 
@@ -171,15 +164,14 @@ if __name__ == "__main__":
                 t_epoch.set_description(f"Epoch {epoch}")
 
                 # get the inputs; data is a list of [inputs, labels]
-                images, labels = batch["X"].float(), batch["y"]
-
-                std = batch['std'].float().to(device)
+                images, labels = batch["X"].float(), batch["y"].float()
 
                 images = images.to(device)
                 labels = labels.to(device)
-
+                # zero the parameter gradients
                 optimizer.zero_grad()
 
+                # forward + backward + optimize
                 outputs = model(images)
                 train_loss = criterion(outputs.squeeze(), labels)
                 train_loss.backward()
@@ -205,20 +197,16 @@ if __name__ == "__main__":
 
                 test_running_loss += test_loss.item()
 
-        current_lr = optimizer.param_groups[0]['lr']
-        scheduler.step()
-
-        if not args.normalize_output:
-            w_b.log_table(outputs.squeeze(), images, labels, epoch + 1)
-        else:
-            w_b.log_table(outputs.squeeze() * int(args.z_range[1]), images, labels * int(args.z_range[1]), epoch + 1)
-            train_mae = train_mae.item() * int(args.z_range[1])
-            test_mae = test_mae.item() * int(args.z_range[1])
+        # if not args.normalize_output:
+        #     w_b.log_table(outputs.squeeze(), images, labels, epoch + 1)
+        # else:
+        #     w_b.log_table(outputs.squeeze() * int(args.z_range[1]), images, labels * int(args.z_range[1]), epoch + 1)
+        #     train_mae = train_mae.item() * int(args.z_range[1])
+        #     test_mae = test_mae.item() * int(args.z_range[1])
 
         train_running_loss = train_running_loss / nb_train_batch
         test_running_loss = test_running_loss / nb_test_batch
 
-        w_b.log_lr(lr=current_lr, epoch=epoch + 1)
         w_b.log_mae(train_mse=train_mae / len(train_dataset), test_mse=test_mae / len(test_dataset), epoch=epoch + 1)
         w_b.log_losses(train_loss=train_running_loss, test_loss=test_running_loss, epoch=epoch + 1)
 
