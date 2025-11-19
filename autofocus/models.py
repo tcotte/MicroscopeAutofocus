@@ -282,56 +282,118 @@ class FlashAttention(nn.Module):
         return out
 
 
-class DCNBlock(nn.Module):
-    def __init__(self,
-                 in_channels: int,
-                 out_channels: int,
-                 kernel_size: tuple[int, int] = (5, 5),
-                 stride: int = 1,
-                 flash: bool = True):
-        super(DCNBlock, self).__init__()
-
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride)
-        if flash:
-            self.attention = FlashAttention(in_dim=out_channels)
-
-        else:
-            self.attention, _ = Self_Attn(in_channels, 'relu')
-
-        self.pool = nn.MaxPool2d(2)
-
-    def forward(self, x: Tensor):
-        x = F.relu(self.conv(x))
-        x = self.attention(x)
-        return self.pool(x)
-
-
-class DCNNetwork(nn.Module):
-    def __init__(self, flash: bool = True):
-        super().__init__()
-
-        self.layers = nn.Sequential(
-            DCNBlock(3, 32, flash=flash),  # 3 → 32 channels
-            DCNBlock(32, 64, flash=flash),  # 32 → 64 channels
-            DCNBlock(64, 96, flash=flash),
-            DCNBlock(96, 128, flash=flash)
-        )
-
-        self.conv5 = nn.Conv2d(in_channels=128, out_channels=32, kernel_size=(5, 5), stride=(1, 1))
-
-        self.fc1 = nn.Linear(in_features=1152, out_features=100)
-        self.fc2 = nn.Linear(in_features=100, out_features=2)
-
-    def forward(self, x: Tensor):
-        x = self.layers(x)
-        x = F.relu(self.conv5(x))
-
-        x = x.view(x.size()[0], -1)
-
-        x = self.fc1(x)
-        x = self.fc2(x)
-
-        return F.softmax(x)
+# class WindowAttention(nn.Module):
+#     def __init__(self, dim, window_size=7, num_heads=4):
+#         super().__init__()
+#         self.dim = dim
+#         self.window_size = window_size
+#         self.num_heads = num_heads
+#         self.head_dim = dim // num_heads
+#
+#         self.qkv = nn.Linear(dim, dim * 3)
+#         self.proj = nn.Linear(dim, dim)
+#
+#     def forward(self, x):
+#         # x: (B, C, H, W)
+#         B, C, H, W = x.shape
+#         ws = self.window_size
+#
+#         # convert to channels-last
+#         x = x.permute(0, 2, 3, 1)  # → (B,H,W,C)
+#
+#         # pad if needed
+#         pad_h = (ws - H % ws) % ws
+#         pad_w = (ws - W % ws) % ws
+#         x = F.pad(x, (0, 0, 0, pad_w, 0, pad_h))
+#         _, Hp, Wp, _ = x.shape
+#
+#         # partition into windows
+#         x = x.view(B, Hp // ws, ws, Wp // ws, ws, C)
+#         x = x.permute(0, 1, 3, 2, 4, 5).reshape(-1, ws * ws, C)
+#
+#         # qkv
+#         qkv = self.qkv(x)
+#         q, k, v = qkv.chunk(3, dim=-1)
+#
+#         q = q.view(q.size(0), q.size(1), self.num_heads, self.head_dim).transpose(1, 2)
+#         k = k.view(k.size(0), k.size(1), self.num_heads, self.head_dim).transpose(1, 2)
+#         v = v.view(v.size(0), v.size(1), self.num_heads, self.head_dim).transpose(1, 2)
+#
+#         # FlashAttention
+#         out = torch.nn.functional.scaled_dot_product_attention(q, k, v)
+#
+#         # merge heads
+#         out = out.transpose(1, 2).reshape(out.size(0), ws * ws, C)
+#
+#         # reverse windows
+#         out = out.view(B, Hp // ws, Wp // ws, ws, ws, C)
+#         out = out.permute(0, 1, 3, 2, 4, 5).reshape(B, Hp, Wp, C)
+#
+#         # unpad
+#         out = out[:, :H, :W, :]
+#
+#         # back to channels-first
+#         out = out.permute(0, 3, 1, 2)  # → (B,C,H,W)
+#
+#         return out
+#
+#
+# class DCNBlock(nn.Module):
+#     def __init__(self,
+#                  in_channels: int,
+#                  out_channels: int,
+#                  kernel_size: tuple[int, int] = (5, 5),
+#                  stride: int = 1,
+#                  flash: bool = True,
+#                  window: bool = True):
+#         super(DCNBlock, self).__init__()
+#
+#         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride)
+#
+#         if window:
+#             self.attention = WindowAttention(dim=out_channels)
+#
+#         else:
+#             if flash:
+#                 self.attention = FlashAttention(in_dim=out_channels)
+#
+#             else:
+#                 self.attention, _ = Self_Attn(in_channels, 'relu')
+#
+#         self.pool = nn.MaxPool2d(2)
+#
+#     def forward(self, x: Tensor):
+#         x = F.relu(self.conv(x))
+#         x = self.attention(x)
+#         return self.pool(x)
+#
+#
+# class DCNNetwork(nn.Module):
+#     def __init__(self, flash: bool = True, window: bool = True):
+#         super().__init__()
+#
+#         self.layers = nn.Sequential(
+#             DCNBlock(3, 32, flash=flash, window=window),  # 3 → 32 channels
+#             DCNBlock(32, 64, flash=flash, window=window),  # 32 → 64 channels
+#             DCNBlock(64, 96, flash=flash, window=window),
+#             DCNBlock(96, 128, flash=flash, window=window)
+#         )
+#
+#         self.conv5 = nn.Conv2d(in_channels=128, out_channels=32, kernel_size=(5, 5), stride=(1, 1))
+#
+#         self.fc1 = nn.Linear(in_features=1152, out_features=100)
+#         self.fc2 = nn.Linear(in_features=100, out_features=2)
+#
+#     def forward(self, x: Tensor):
+#         x = self.layers(x)
+#         x = F.relu(self.conv5(x))
+#
+#         x = x.view(x.size()[0], -1)
+#
+#         x = self.fc1(x)
+#         x = self.fc2(x)
+#
+#         return F.softmax(x)
 
 
 # class DefocusingClassificationNetwork(nn.Module):
@@ -403,6 +465,119 @@ class DCNNetwork(nn.Module):
 #         x = self.fc2(x)
 #
 #         return F.softmax(x)
+
+# ---------------------------
+# WINDOWED ATTENTION MODULE
+# ---------------------------
+class WindowAttention(nn.Module):
+    def __init__(self, dim, window_size=7, num_heads=4):
+        super().__init__()
+        self.dim = dim
+        self.window_size = window_size
+        self.num_heads = num_heads
+        self.head_dim = dim // num_heads
+
+        self.qkv = nn.Linear(dim, dim * 3)
+        self.proj = nn.Linear(dim, dim)
+
+    def forward(self, x):
+        # x: (B, C, H, W)
+        B, C, H, W = x.shape
+        ws = self.window_size
+
+        # convert to channels-last
+        x = x.permute(0, 2, 3, 1)  # → (B,H,W,C)
+
+        # pad if needed
+        pad_h = (ws - H % ws) % ws
+        pad_w = (ws - W % ws) % ws
+        x = F.pad(x, (0, 0, 0, pad_w, 0, pad_h))
+        _, Hp, Wp, _ = x.shape
+
+        # partition into windows
+        x = x.view(B, Hp // ws, ws, Wp // ws, ws, C)
+        x = x.permute(0, 1, 3, 2, 4, 5).reshape(-1, ws * ws, C)
+
+        # qkv
+        qkv = self.qkv(x)
+        q, k, v = qkv.chunk(3, dim=-1)
+
+        q = q.view(q.size(0), q.size(1), self.num_heads, self.head_dim).transpose(1, 2)
+        k = k.view(k.size(0), k.size(1), self.num_heads, self.head_dim).transpose(1, 2)
+        v = v.view(v.size(0), v.size(1), self.num_heads, self.head_dim).transpose(1, 2)
+
+        # FlashAttention
+        out = torch.nn.functional.scaled_dot_product_attention(q, k, v)
+
+        # merge heads
+        out = out.transpose(1, 2).reshape(out.size(0), ws * ws, C)
+
+        # reverse windows
+        out = out.view(B, Hp // ws, Wp // ws, ws, ws, C)
+        out = out.permute(0, 1, 3, 2, 4, 5).reshape(B, Hp, Wp, C)
+
+        # unpad
+        out = out[:, :H, :W, :]
+
+        # back to channels-first
+        out = out.permute(0, 3, 1, 2)  # → (B,C,H,W)
+
+        return out
+
+
+# ---------------------------
+# DCN BLOCK WITH FIXED ATTENTION
+# ---------------------------
+class DCNBlock(nn.Module):
+    def __init__(self, in_channels, out_channels,
+                 kernel_size=(5, 5), stride=1,
+                 flash=True, window=True):
+        super().__init__()
+
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride)
+
+        if window:
+            self.attention = WindowAttention(dim=out_channels)
+        else:
+            raise NotImplementedError("Only windowed attention is stable for 224x224")
+
+        self.pool = nn.MaxPool2d(2)
+
+    def forward(self, x):
+        x = F.relu(self.conv(x))
+        x = self.attention(x)
+        x = self.pool(x)
+        return x
+
+
+# ---------------------------
+# FINAL DCN NETWORK
+# ---------------------------
+class DCNNetwork(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.layers = nn.Sequential(
+            DCNBlock(3, 32),
+            DCNBlock(32, 64),
+            DCNBlock(64, 96),
+            DCNBlock(96, 128)
+        )
+
+        # after 4 poolings: 224 → 112 → 56 → 28 → 14
+        self.conv5 = nn.Conv2d(128, 32, 5)
+
+        # adaptive pooling avoids incorrect flatten sizes
+        self.gap = nn.AdaptiveAvgPool2d(1)
+
+        self.fc = nn.Linear(32, 2)
+
+    def forward(self, x):
+        x = self.layers(x)
+        x = F.relu(self.conv5(x))
+        x = self.gap(x).flatten(1)  # → (B, 32)
+        x = self.fc(x)              # logits (NO softmax)
+        return x
 
 
 if __name__ == '__main__':

@@ -181,7 +181,7 @@ if __name__ == "__main__":
                 optimizer.zero_grad()
 
                 outputs = model(images)
-                train_loss = criterion(outputs.squeeze(), labels)
+                train_loss = criterion(outputs.squeeze(), labels.to(torch.long))
                 train_loss.backward()
                 optimizer.step()
 
@@ -201,7 +201,7 @@ if __name__ == "__main__":
                 outputs = model(images)
 
                 test_mae += mse_func(outputs.squeeze(), labels)
-                test_loss = criterion(outputs.squeeze(), labels)
+                test_loss = criterion(outputs.squeeze(), labels.to(torch.long))
 
                 test_running_loss += test_loss.item()
 

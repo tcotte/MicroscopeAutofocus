@@ -167,5 +167,6 @@ models
 .dvc/config
 .dvc/config.local
 output_validation/
- image_processing/data.xlsx
+image_processing/data.xlsx
  .dvc
+output/
