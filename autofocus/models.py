@@ -9,49 +9,50 @@ import sys
 
 from torch._C._te import Tensor
 
-sys.path.insert(0, 'autofocus/mobile-vit-pytorch/mobile_vit')
-sys.path.insert(0, '../autofocus/mobile-vit-pytorch/mobile_vit')
 
-from mobilevit_v3_v1 import MobileViTv3_v1  #
+# sys.path.insert(0, 'autofocus/mobile-vit-pytorch/mobile_vit')
+# sys.path.insert(0, '../autofocus/mobile-vit-pytorch/mobile_vit')
+#
+# from mobilevit_v3_v1 import MobileViTv3_v1  #
 
 
-class ModifiedMobileViT(MobileViTv3_v1):
-    def __init__(self, drop_out: float = 0.2, **kwargs):
-        super(ModifiedMobileViT, self).__init__(**kwargs)
-
-        # Add your additional layers here
-        self.fc1 = nn.Linear(576, 1024)
-        self.fc2 = nn.Linear(1024, 512)
-        self.fc3 = nn.Linear(512, 16, bias=True)
-        self.fc4 = nn.Linear(16, 1, bias=True)
-
-        self.bn1 = nn.BatchNorm1d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-        self.bn2 = nn.BatchNorm1d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-
-        # Optional: You can add activation functions or dropout as needed
-        self.dropout = nn.Dropout(drop_out)
-
-        self.hardswish = nn.Hardswish(inplace=True)
-
-    def forward(self, x):
-        # Use the forward method from the original MobileViTv3_v1
-        x = super(ModifiedMobileViT, self).forward(x)
-
-        # Pass through the new layers after the original forward pass
-        x = self.bn1(self.fc1(x))  # Apply ReLU activation
-        x = self.dropout(x)  # Apply dropout (optional)
-
-        x = self.hardswish(self.fc2(x))
-        x = self.bn2(x)
-        # x = s(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-
-        x = self.dropout(x)
-
-        x = self.hardswish((self.fc3(x)))
-
-        x = self.fc4(x)
-
-        return x
+# class ModifiedMobileViT(MobileViTv3_v1):
+#     def __init__(self, drop_out: float = 0.2, **kwargs):
+#         super(ModifiedMobileViT, self).__init__(**kwargs)
+#
+#         # Add your additional layers here
+#         self.fc1 = nn.Linear(576, 1024)
+#         self.fc2 = nn.Linear(1024, 512)
+#         self.fc3 = nn.Linear(512, 16, bias=True)
+#         self.fc4 = nn.Linear(16, 1, bias=True)
+#
+#         self.bn1 = nn.BatchNorm1d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+#         self.bn2 = nn.BatchNorm1d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+#
+#         # Optional: You can add activation functions or dropout as needed
+#         self.dropout = nn.Dropout(drop_out)
+#
+#         self.hardswish = nn.Hardswish(inplace=True)
+#
+#     def forward(self, x):
+#         # Use the forward method from the original MobileViTv3_v1
+#         x = super(ModifiedMobileViT, self).forward(x)
+#
+#         # Pass through the new layers after the original forward pass
+#         x = self.bn1(self.fc1(x))  # Apply ReLU activation
+#         x = self.dropout(x)  # Apply dropout (optional)
+#
+#         x = self.hardswish(self.fc2(x))
+#         x = self.bn2(x)
+#         # x = s(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+#
+#         x = self.dropout(x)
+#
+#         x = self.hardswish((self.fc3(x)))
+#
+#         x = self.fc4(x)
+#
+#         return x
 
 
 class MobileNetV3_Regressor(nn.Module):
@@ -242,17 +243,43 @@ class Self_Attn(nn.Module):
         return out, attention
 
 
+# class FlashAttention(nn.Module):
+#     def __init__(self):
+#         super(FlashAttention, self).__init__()
+#         pass
+#
+#     def forward(self, x: Tensor):
+#         q = self.query_conv(x).flatten(2).transpose(1, 2)
+#         k = self.key_conv(x).flatten(2).transpose(1, 2)
+#         v = self.value_conv(x).flatten(2).transpose(1, 2)
+#
+#         return torch.nn.functional.scaled_dot_product_attention(q, k, v)
+
 class FlashAttention(nn.Module):
-    def __init__(self):
-        super(FlashAttention, self).__init__()
-        pass
+    def __init__(self, in_dim: int, num_heads: int = 1):
+        super().__init__()
+        head_dim = in_dim // num_heads
 
-    def forward(self, x: Tensor):
-        q = self.query_conv(x).flatten(2).transpose(1, 2)
-        k = self.key_conv(x).flatten(2).transpose(1, 2)
-        v = self.value_conv(x).flatten(2).transpose(1, 2)
+        self.num_heads = num_heads
+        self.query_conv = nn.Conv2d(in_dim, in_dim, kernel_size=1)
+        self.key_conv = nn.Conv2d(in_dim, in_dim, kernel_size=1)
+        self.value_conv = nn.Conv2d(in_dim, in_dim, kernel_size=1)
 
-        return torch.nn.functional.scaled_dot_product_attention(q, k, v)
+    def forward(self, x):
+        B, C, H, W = x.shape
+        seq_len = H * W
+
+        # conv outputs (B, C, H, W)
+        q = self.query_conv(x).reshape(B, self.num_heads, C // self.num_heads, seq_len).transpose(2, 3)
+        k = self.key_conv(x).reshape(B, self.num_heads, C // self.num_heads, seq_len).transpose(2, 3)
+        v = self.value_conv(x).reshape(B, self.num_heads, C // self.num_heads, seq_len).transpose(2, 3)
+
+        # now: (B, heads, seq_len, head_dim)
+        out = torch.nn.functional.scaled_dot_product_attention(q, k, v)
+
+        # reshape back to (B, C, H, W)
+        out = out.transpose(2, 3).reshape(B, C, H, W)
+        return out
 
 
 class DCNBlock(nn.Module):
@@ -266,7 +293,7 @@ class DCNBlock(nn.Module):
 
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride)
         if flash:
-            self.attention = FlashAttention()
+            self.attention = FlashAttention(in_dim=out_channels)
 
         else:
             self.attention, _ = Self_Attn(in_channels, 'relu')
@@ -278,15 +305,16 @@ class DCNBlock(nn.Module):
         x = self.attention(x)
         return self.pool(x)
 
+
 class DCNNetwork(nn.Module):
-    def __init__(self):
+    def __init__(self, flash: bool = True):
         super().__init__()
 
         self.layers = nn.Sequential(
-            DCNBlock(3, 32),        # 3 → 32 channels
-            DCNBlock(32, 64),       # 32 → 64 channels
-            DCNBlock(64, 128),
-            DCNBlock(128, 32)
+            DCNBlock(3, 32, flash=flash),  # 3 → 32 channels
+            DCNBlock(32, 64, flash=flash),  # 32 → 64 channels
+            DCNBlock(64, 96, flash=flash),
+            DCNBlock(96, 128, flash=flash)
         )
 
         self.conv5 = nn.Conv2d(in_channels=128, out_channels=32, kernel_size=(5, 5), stride=(1, 1))
@@ -386,7 +414,7 @@ if __name__ == '__main__':
     # x = torch.randn(8, 156672)
     # print(model(x))
 
-    net = DefocusingClassificationNetwork()
+    net = DCNNetwork()
     x = torch.randn(1, 3, 224, 224)
     x = x.to('cuda')
     net.to('cuda')

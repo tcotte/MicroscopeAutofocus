@@ -3,27 +3,20 @@ Regression accuracies: https://machinelearningmastery.com/regression-metrics-for
 Deep learning autofocus: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8803042/#r24
 """
 import argparse
-import logging
 import os
-import json
 
 import albumentations as A
 import imutils.paths
 import numpy as np
 import torch
-import torchvision
-from imutils.paths import list_images
-from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import DataLoader
-from torchvision.models import MobileNet_V3_Small_Weights
 from tqdm import tqdm
 
-from autofocus.metrics import ClassificationMetrics
-from autofocus.models import ModifiedMobileViT, DefocusFCFNN, DefocusingClassificationNetwork
-from autofocus_dataset import AutofocusDatasetFromList, AutofocusDatasetFromMetadata, AutofocusFourierDataset, \
-    ClassificationDataset
+from autofocus_dataset import ClassificationDataset
 from logger import WeightandBiaises
+from metrics import ClassificationMetrics
+from models import DCNNetwork
 from utils import get_device, get_os
 
 parser = argparse.ArgumentParser(
@@ -116,7 +109,7 @@ test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=T
                              num_workers=num_workers)
 
 ### Model
-model = DefocusingClassificationNetwork()
+model = DCNNetwork()
 
 
 criterion = nn.CrossEntropyLoss()
