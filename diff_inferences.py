@@ -18,7 +18,7 @@ if __name__ == '__main__':
     batch_size = 2
     num_workers = 8
 
-    model_path = 'autofocus/models/90th_epoch_chkpt.pt'
+    model_path = 'autofocus/models/60th_epoch_chkpt.pt'
     model_checkpoint = torch.load(model_path)
     model = MobileNetV3_Regressor()
     model.load_state_dict(model_checkpoint['model_state_dict'])
@@ -30,7 +30,7 @@ if __name__ == '__main__':
         sub_df = df_test[df_test['xy_position'] == position]
 
         test_transform = A.Compose([
-            A.Normalize(),
+            # A.Normalize(),
             A.augmentations.geometric.resize.LongestMaxSize(max_size=512),
             A.pytorch.transforms.ToTensorV2()
         ])
@@ -56,18 +56,19 @@ if __name__ == '__main__':
 
             predictions = np.squeeze(res.cpu().numpy()).tolist()
             if isinstance(predictions, float):
-                list_predictions.append(predictions)
+                list_predictions.append(predictions *77)
             else:
-                list_predictions.extend(predictions)
+                list_predictions.extend([i*77 for i in predictions])
 
         error = rmse(np.array(list_predictions), np.array(list_targets))
 
         fig = plt.figure(figsize=(20, 20))
         plt.title(f"RMSE {error:.2f}")
+        print(f"XY position: {position} -> RMSE {error:.2f}")
         plt.suptitle(f'XY position: {position}')
         plt.plot(np.array(list_targets), np.array(list_targets), color='blue', linewidth=1)
         plt.scatter(np.array(list_targets), np.array(list_predictions), c='r', )
         plt.xlabel('Z distance_af from focus (µm)')
         plt.ylabel('Predicted Z distance_af from focus (µm)')
         plt.savefig(f"autofocus/output/{position}.jpg")
-        plt.show()
+        # plt.show()

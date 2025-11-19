@@ -15,6 +15,7 @@ from torch.utils.data import Dataset
 from torchvision.transforms import transforms
 from skimage.io import imread
 
+
 # class AutofocusDataset(Dataset):
 #     def __init__(self, project_dir: str, dataset: str, z_range: Union[List, None] = None, normalize_output=False,
 #                  transform=None):
@@ -72,6 +73,10 @@ from skimage.io import imread
 #             tensor_image = transformed["image"]
 #
 #         return {"X": tensor_image, "y": z_value}
+
+
+def get_focus_diff_from_exif_metadata(img_path: str) -> float:
+    return float(exif.Image(img_path).make)
 
 class DifferenceAFDataset(Dataset):
     def __init__(self, df: pd.DataFrame, image_folder: str, kernel_size: int = 3, transform=None,
@@ -165,12 +170,47 @@ class DifferenceAFDataset(Dataset):
             norm[..., c] = (channel - mean) / std
         return norm
 
+
+class ClassificationDataset(Dataset):
+    def __init__(self,
+                 images_list: list[str],
+                 transform=None) -> None:
+        self.images_list = images_list
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.images_list)
+
+    def __getitem__(self, idx):
+        img_path = self.images_list[idx]
+        z_value = get_focus_diff_from_exif_metadata(img_path=img_path)
+
+        if z_value <= 0:
+            y = 0
+
+        else:
+            y = 1
+
+        pillow_image = Image.open(img_path)
+
+        if self.transform is None:
+            transform = transforms.ToTensor()
+
+            # Convert the image to PyTorch tensor
+            tensor_image = transform(pillow_image)
+
+        else:
+            transformed = self.transform(image=np.array(pillow_image))
+            tensor_image = transformed["image"]
+
+        return {"X": tensor_image, "y": y}
+
+
 class AutofocusFourierDataset(Dataset):
     def __init__(self,
                  images_list: list[str],
                  crop_size=None,
                  mean_subtract=True,
-                 normalize=True,
                  fourier_quadrant_size=256,
                  transform=None):
         """
@@ -185,7 +225,6 @@ class AutofocusFourierDataset(Dataset):
         self.images_list = images_list
         self.crop_size = crop_size
         self.mean_subtract = mean_subtract
-        self.normalize = normalize
         self.fourier_quadrant_size = fourier_quadrant_size
         self.transform = transform
 
@@ -211,12 +250,6 @@ class AutofocusFourierDataset(Dataset):
             top = (H - ch) // 2
             left = (W - cw) // 2
             img = img[top:top + ch, left:left + cw]
-
-        # --- Mean subtraction & normalization ---
-        if self.mean_subtract:
-            img -= img.mean()
-        if self.normalize:
-            img /= (img.std() + 1e-8)
 
         if self.transform is None:
             transform = transforms.ToTensor()
@@ -367,11 +400,15 @@ if __name__ == "__main__":
     # print(len(train_dataset))
     import matplotlib.pyplot as plt
 
-    ds = AutofocusFourierDataset(images_list=list(list_images(r'C:\Users\tristan_cotte\PycharmProjects\microscope_autofocus\autofocus\data\dataset_09_25_2025\X\train')))
+    ds = AutofocusFourierDataset(images_list=list(list_images(
+        r'C:\Users\tristan_cotte\PycharmProjects\microscope_autofocus\autofocus\data\dataset_09_25_2025\X\train')))
 
     # ds = DifferenceAFDataset(excel_filepath=r'data/diff_train.xlsx',
     #                          image_folder=r'data\dataset_09_25_2025\X\train')
+    start = time.time()
     data = ds[0]
+    print('Time took to load dataset image: ', time.time() - start)
+
     # gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     # plt.imshow(data['X'], cmap='gray')
     print(data['X'].size())
