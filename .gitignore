@@ -170,3 +170,4 @@ output_validation/
 image_processing/data.xlsx
  .dvc
 output/
+ autofocus/checkpoint/

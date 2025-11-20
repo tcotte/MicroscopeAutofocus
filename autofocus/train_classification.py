@@ -205,8 +205,8 @@ if __name__ == "__main__":
         train_running_loss = train_running_loss / nb_train_batch
         test_running_loss = test_running_loss / nb_test_batch
 
-        w_b.log_classification_metrics(train_metrics.compute(), epoch= epoch + 1)
-        w_b.log_classification_metrics(test_metrics.compute(), epoch= epoch + 1)
+        w_b.log_classification_metrics(train_metrics.compute(), set_='train', epoch= epoch + 1)
+        w_b.log_classification_metrics(test_metrics.compute(), set_='test', epoch= epoch + 1)
         train_metrics.reset()
         test_metrics.reset()
 

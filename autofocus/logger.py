@@ -46,6 +46,16 @@ class WeightandBiaises:
         bool_commit = True
         wandb.log({"Train/Loss": train_loss, "Test/Loss": test_loss}, step=epoch, commit=bool_commit)
 
+    def log_classification_metrics(self, metrics: dict[str, str], set_: str, epoch: int) -> None:
+
+        d = {}
+        for key, value in metrics.items():
+            capitalized_set = set_.capitalize()
+            capitalized_metric = key.capitalize()
+            d[f'{capitalized_set}/{capitalized_metric}'] = float(value)
+
+        wandb.log(d, step=epoch)
+
     def log_lr(self, lr: float, epoch: int) -> None:
         """
         Log train and test losses in separate panels.
