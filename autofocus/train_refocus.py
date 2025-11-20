@@ -38,6 +38,7 @@ def filter_by_defocus_sign(list_images: list[str], positive_sign: bool) -> list[
 
     return list(compress(list_images, list_index))
 
+
 parser = argparse.ArgumentParser(
     prog='Autofocus on microscope',
     description='This program enables to train a model which is able to know from a picture at which '
@@ -72,7 +73,6 @@ parser.add_argument("--split_by_xy_positions", default=False, action="store_true
 parser.add_argument("-vit", "--mobile_vit", default=False, action="store_true", required=False,
                     help="Use Mobile Vit instead of MobileNet")
 parser.add_argument('--positive', action=argparse.BooleanOptionalAction)
-
 
 args = parser.parse_args()
 
@@ -133,7 +133,6 @@ test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=T
 ### Model
 model = RefocusingNetwork()
 
-
 criterion = nn.L1Loss()
 optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
@@ -158,6 +157,7 @@ if __name__ == "__main__":
     train_accuracies = []
     test_accuracies = []
 
+    max_z_value = train_dataset.get_max_defocus()
 
     for epoch in range(args.epoch):  # loop over the dataset multiple times
         train_running_loss = 0.0
@@ -203,12 +203,10 @@ if __name__ == "__main__":
 
                 test_running_loss += test_loss.item()
 
-        # if not args.normalize_output:
-        #     w_b.log_table(outputs.squeeze(), images, labels, epoch + 1)
-        # else:
-        #     w_b.log_table(outputs.squeeze() * int(args.z_range[1]), images, labels * int(args.z_range[1]), epoch + 1)
-        #     train_mae = train_mae.item() * int(args.z_range[1])
-        #     test_mae = test_mae.item() * int(args.z_range[1])
+        if not args.normalize_output:
+            w_b.log_table(outputs.squeeze(), images, labels, epoch + 1)
+        else:
+            w_b.log_table(outputs.squeeze() * max_z_value, images, labels * max_z_value, epoch + 1)
 
         train_running_loss = train_running_loss / nb_train_batch
         test_running_loss = test_running_loss / nb_test_batch
@@ -225,8 +223,6 @@ if __name__ == "__main__":
 
         train_losses.append(train_running_loss)
         test_losses.append(test_running_loss)
-        train_accuracies.append(train_mae / len(train_dataset))
-        test_accuracies.append(test_mae / len(test_dataset))
 
         if epoch % 10 == 0:
             w_b.save_checkpoint(epoch=epoch, model=model, optimizer=optimizer, train_loss=train_running_loss,
