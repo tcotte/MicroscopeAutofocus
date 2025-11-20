@@ -154,7 +154,7 @@ if __name__ == "__main__":
                 t_epoch.set_description(f"Epoch {epoch}")
 
                 # get the inputs; data is a list of [inputs, labels]
-                images, labels = batch["X"].float(), batch["y"].float()
+                images, labels = batch["X"].float(), batch["y"]
 
                 images = images.to(device)
                 labels = labels.to(device)
@@ -163,14 +163,15 @@ if __name__ == "__main__":
 
                 # forward + backward + optimize
                 outputs = model(images)
-                train_loss = criterion(outputs.squeeze(), labels)
+                train_loss = criterion(outputs, labels.to(torch.float))
                 train_loss.backward()
                 optimizer.step()
 
                 # train_mae += mse_func(outputs.squeeze(), labels)
 
                 _, train_predictions = torch.max(outputs, 1)
-                train_metrics.update(preds=train_predictions, targets=labels)
+                _, targets = torch.max(labels, 1)
+                train_metrics.update(preds=train_predictions, targets=targets)
 
                 # print statistics
                 train_running_loss += train_loss.item()
@@ -186,10 +187,11 @@ if __name__ == "__main__":
                 outputs = model(images)
 
                 # test_mae += mse_func(outputs.squeeze(), labels)
-                test_loss = criterion(outputs.squeeze(), labels)
+                test_loss = criterion(outputs.squeeze(), labels.to(torch.float))
 
                 _, test_predictions = torch.max(outputs, 1)
-                test_metrics.update(preds=test_predictions, targets=labels)
+                _, targets = torch.max(labels, 1)
+                test_metrics.update(preds=test_predictions, targets=targets)
 
                 test_running_loss += test_loss.item()
 

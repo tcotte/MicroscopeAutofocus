@@ -186,10 +186,10 @@ class ClassificationDataset(Dataset):
         z_value = get_focus_diff_from_exif_metadata(img_path=img_path)
 
         if z_value <= 0:
-            y = 0
+            y = torch.tensor((1, 0))
 
         else:
-            y = 1
+            y = torch.tensor((0, 1))
 
         pillow_image = Image.open(img_path)
 
