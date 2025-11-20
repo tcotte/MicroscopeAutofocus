@@ -530,8 +530,7 @@ class WindowAttention(nn.Module):
 # ---------------------------
 class DCNBlock(nn.Module):
     def __init__(self, in_channels, out_channels,
-                 kernel_size=(5, 5), stride=1,
-                 flash=True, window=True):
+                 kernel_size=(5, 5), stride=1, window=True, max_pool_kernel: int=2, p=1, s=None):
         super().__init__()
 
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride)
@@ -541,7 +540,7 @@ class DCNBlock(nn.Module):
         else:
             raise NotImplementedError("Only windowed attention is stable for 224x224")
 
-        self.pool = nn.MaxPool2d(2)
+        self.pool = nn.MaxPool2d(max_pool_kernel, padding=p, stride=s)
 
     def forward(self, x):
         x = F.relu(self.conv(x))
@@ -561,7 +560,7 @@ class DCNNetwork(nn.Module):
             DCNBlock(3, 32),
             DCNBlock(32, 64),
             DCNBlock(64, 96),
-            DCNBlock(96, 128)
+            DCNBlock(96, 128, max_pool_kernel=3, p=1, s=None)
         )
 
         # after 4 poolings: 224 → 112 → 56 → 28 → 14
@@ -570,13 +569,94 @@ class DCNNetwork(nn.Module):
         # adaptive pooling avoids incorrect flatten sizes
         self.gap = nn.AdaptiveAvgPool2d(1)
 
-        self.fc = nn.Linear(32, 2)
+        self.fc1 = nn.Linear(512, 100)
+        self.fc2 = nn.Linear(100, 2)
 
     def forward(self, x):
         x = self.layers(x)
         x = F.relu(self.conv5(x))
-        x = self.gap(x).flatten(1)  # → (B, 32)
-        x = self.fc(x)              # logits (NO softmax)
+        # x = self.gap(x).flatten(1)  # → (B, 32)
+        x = x.reshape(x.size()[0], -1)
+        x = self.fc1(x)
+        x = self.fc2(x)
+        return x
+
+
+class ARB(nn.Module):
+    def __init__(self, in_channels: int, version: int = 1):
+        super().__init__()
+        self._version = version
+
+        if version == 1:
+            self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=in_channels, kernel_size=(3, 3), stride=1,
+                                   padding=1)
+            out_channels = in_channels
+
+        else:
+            self.identity = nn.Conv2d(in_channels=in_channels, out_channels=in_channels * 2, kernel_size=(1, 1),
+                                      stride=2)
+            self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=in_channels * 2, kernel_size=(3, 3),
+                                   stride=2, padding=1)
+            out_channels = in_channels * 2
+
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.att1 = WindowAttention(dim=out_channels)
+
+        self.bn2 = nn.BatchNorm2d(out_channels)
+
+    def forward(self, x):
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = self.att1(out)
+
+        if self._version == 1:
+            x = out + x
+        else:
+            x = out + self.identity(x)
+        return F.relu(self.bn2(x))
+
+
+class ARBBlock(nn.Module):
+    def __init__(self, in_channels: int):
+        super().__init__()
+
+        self.arb_v1 = ARB(in_channels=in_channels, version=1)
+        self.arb_v2 = ARB(in_channels=in_channels, version=2)
+
+    def forward(self, x):
+        x = self.arb_v1(x)
+        x = self.arb_v2(x)
+        return x
+
+
+class RefocusingNetwork(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=(5, 5), stride=1)
+        self.max_pool1 = nn.MaxPool2d(kernel_size=(4, 4))
+
+        self.arb1 = ARBBlock(in_channels=32)
+        self.arb2 = ARBBlock(in_channels=64)
+        self.arb3 = ARBBlock(in_channels=128)
+        self.arb4 = ARBBlock(in_channels=256)
+
+        # self.gap = nn.AdaptiveAvgPool2d(1)
+
+        self.fc1 = nn.Linear(in_features=8192, out_features=500)
+        self.fc2 = nn.Linear(in_features=500, out_features=1)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.max_pool1(x)
+
+        x = self.arb1(x)
+        x = self.arb2(x)
+        x = self.arb3(x)
+        x = self.arb4(x)
+
+        x = x.reshape(x.size(0), -1)
+        x = self.fc1(x)
+        x = self.fc2(x)
         return x
 
 
@@ -589,8 +669,20 @@ if __name__ == '__main__':
     # x = torch.randn(8, 156672)
     # print(model(x))
 
+    # net = DCNNetwork()
+    # x = torch.randn(1, 3, 224, 224)
+    # x = x.to('cuda')
+    # net.to('cuda')
+    # print(net(x))
+
     net = DCNNetwork()
     x = torch.randn(1, 3, 224, 224)
     x = x.to('cuda')
     net.to('cuda')
     print(net(x))
+
+    # net = ARB(64, version=2)
+    # x = torch.randn(1, 64, 64, 64)
+    # x = x.to('cuda')
+    # net.to('cuda')
+    # print(net(x).size())

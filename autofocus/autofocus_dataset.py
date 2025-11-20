@@ -289,10 +289,20 @@ class AutofocusDatasetFromMetadata(Dataset):
 
         self.transform = transform
 
-        self.z_range = z_range
+        max_defocus = self.get_max_defocus()
+        self.z_range = [-max_defocus, max_defocus]
 
     def __len__(self):
         return len(self.images_list)
+
+    def get_max_defocus(self) -> float:
+        max_value = 0
+        for img_path in self.images_list:
+            current_value = self.get_focus_diff_from_exif_metadata(img_path=img_path)
+            if current_value > max_value:
+                max_value = current_value
+
+        return max_value
 
     @staticmethod
     def get_focus_diff_from_exif_metadata(img_path: str) -> float:
@@ -335,6 +345,8 @@ class AutofocusDatasetFromList(Dataset):
         self.transform = transform
 
         self.z_range = z_range
+
+
 
     def __len__(self):
         return len(self.images_list)
